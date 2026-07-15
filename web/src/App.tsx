@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DagView } from "./components/DagView";
+import { ExecControls } from "./components/ExecControls";
 import { GatePanel } from "./components/GatePanel";
 import { NodePanel } from "./components/NodePanel";
 import { fetchDag, resetTasks } from "./api";
@@ -101,7 +102,7 @@ export default function App() {
           <span className="topbar__logo">🐳</span>
           <div>
             <div className="topbar__title">Orca DAG Viewer</div>
-            <div className="topbar__subtitle">和 agent 聊天建图 · 在这里选 harness 逐个 fire</div>
+            <div className="topbar__subtitle">和 agent 聊天建图 · 加 worker，让 Orca 自动执行</div>
           </div>
         </div>
         <div className="topbar__right">
@@ -138,7 +139,12 @@ export default function App() {
                 </span>
               ))}
             </div>
-            <div className="dag-toolbar__meta">{dag.nodes.length} 个任务 · {dag.edges.length} 条依赖</div>
+            <div className="dag-toolbar__right">
+              <span className="dag-toolbar__meta">
+                {dag.nodes.length} 个任务 · {dag.edges.length} 条依赖
+              </span>
+              <ExecControls hasTasks={dag.nodes.length > 0} />
+            </div>
           </div>
 
           <div className="dag-canvas">
@@ -146,9 +152,7 @@ export default function App() {
 
             <GatePanel gates={dag.gates} onResolved={refresh} />
 
-            {selected && (
-              <NodePanel node={selected} onClose={() => setSelectedId(null)} onChanged={refresh} />
-            )}
+            {selected && <NodePanel node={selected} onClose={() => setSelectedId(null)} />}
           </div>
         </section>
       </div>

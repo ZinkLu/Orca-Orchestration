@@ -5,15 +5,14 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join } from "node:path";
 import {
-  dispatchToTerminal,
-  fireTask,
+  createWorker,
   listGates,
   listTasks,
   listTerminals,
   runOrca,
+  startRun,
+  stopRun,
   tasksToDag,
-  updateTaskStatus,
-  type OrcaTask,
 } from "./orca";
 import { loadEmbeddedAssets } from "./webAssets";
 
@@ -24,17 +23,14 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 const PORT = Number(process.env.PORT ?? 8787);
-// Directory used to resolve the `active` worktree when firing tasks.
+// Directory used to resolve the `active` worktree for workers / the coordinator.
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR ?? process.cwd();
 
-const VALID_STATUS: OrcaTask["status"][] = [
-  "pending",
-  "ready",
-  "dispatched",
-  "completed",
-  "failed",
-  "blocked",
-];
+// Default instructions handed to the coordinator loop. Users rarely need to
+// change this — it just tells Orca to run the existing DAG topologically.
+const DEFAULT_RUN_SPEC =
+  "Execute the current orchestration task DAG: dispatch each ready task to an idle worker, " +
+  "respect dependencies, wait for each worker_done, advance the graph, and summarize blockers.";
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, workspace: WORKSPACE_DIR });
@@ -60,52 +56,37 @@ app.get("/api/terminals", async (_req, res) => {
   }
 });
 
-/**
- * Fire a task on a chosen harness. Body: { taskId, harness, prompt, worktree? }.
- * Spawns a terminal running `harness`, types `prompt` into it, marks dispatched.
- */
-app.post("/api/fire", async (req, res) => {
-  const taskId = String(req.body?.taskId ?? "").trim();
+/** Spawn a worker agent terminal running a harness. Body: { harness, worktree? }. */
+app.post("/api/worker", async (req, res) => {
   const harness = String(req.body?.harness ?? "").trim();
-  const prompt = String(req.body?.prompt ?? "").trim();
   const worktree = req.body?.worktree ? String(req.body.worktree).trim() : undefined;
-  if (!taskId || !harness || !prompt) {
-    res.status(400).json({ error: "taskId, harness, prompt required" });
+  if (!harness) {
+    res.status(400).json({ error: "harness required" });
     return;
   }
   try {
-    const result = await fireTask({ taskId, harness, prompt, worktree });
+    const result = await createWorker(harness, worktree);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: String((err as Error).message ?? err) });
   }
 });
 
-/** Dispatch a task to an already-running terminal. Body: { taskId, handle }. */
-app.post("/api/dispatch", async (req, res) => {
-  const taskId = String(req.body?.taskId ?? "").trim();
-  const handle = String(req.body?.handle ?? "").trim();
-  if (!taskId || !handle) {
-    res.status(400).json({ error: "taskId, handle required" });
-    return;
-  }
+/** Start the coordinator loop so Orca auto-executes the DAG. Body: { spec? }. */
+app.post("/api/run", async (req, res) => {
+  const spec = String(req.body?.spec ?? "").trim() || DEFAULT_RUN_SPEC;
   try {
-    await dispatchToTerminal(taskId, handle);
-    res.json({ ok: true });
+    const result = await startRun(spec);
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: String((err as Error).message ?? err) });
   }
 });
 
-/** Set a task's status directly. Body: { status }. */
-app.post("/api/tasks/:id/status", async (req, res) => {
-  const status = String(req.body?.status ?? "").trim() as OrcaTask["status"];
-  if (!VALID_STATUS.includes(status)) {
-    res.status(400).json({ error: `status must be one of ${VALID_STATUS.join(", ")}` });
-    return;
-  }
+/** Stop the active coordinator run. */
+app.post("/api/run-stop", async (_req, res) => {
   try {
-    await updateTaskStatus(req.params.id, status);
+    await stopRun();
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: String((err as Error).message ?? err) });

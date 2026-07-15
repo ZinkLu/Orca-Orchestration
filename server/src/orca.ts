@@ -161,65 +161,64 @@ export async function listTerminals(): Promise<OrcaTerminal[]> {
   }));
 }
 
-export interface FireResult {
+export interface WorkerResult {
   handle: string;
   worktreeId: string;
 }
 
 /**
- * Fire a task on a chosen harness.
+ * Spawn a worker agent terminal running `harness` in a worktree.
  *
- * Per the branch's design (option A): the harness is just the command run in a
- * fresh terminal, and the (possibly edited) `prompt` is typed into it — so what
- * the worker sees is the user's fine-tuned text, not necessarily the stored
- * `task.spec`. We then flip the task to `dispatched` so the DAG recolors.
- *
- * `orca orchestration dispatch` (coordinator-wired) is intentionally NOT used
- * here: it builds its preamble from the immutable stored spec, which would
- * ignore the user's edit. This keeps "edit → fire" honest and harness-agnostic
- * (kimi / claude / opencode / grok are all just commands).
+ * The coordinator (`orca orchestration run`) does NOT spawn workers itself — it
+ * dispatches ready tasks to idle worker terminals that already exist. So the
+ * viewer builds that pool: a "harness" is just the command launched in the
+ * terminal (claude / kimi / opencode / grok / codex …), which is where the
+ * choice of agent lives.
  */
-export async function fireTask(opts: {
-  taskId: string;
-  harness: string;
-  prompt: string;
-  worktree?: string;
-}): Promise<FireResult> {
-  const worktree = opts.worktree?.trim() || "active";
+export async function createWorker(harness: string, worktree = "active"): Promise<WorkerResult> {
   const created = await runOrca<{ terminal?: { handle?: string; worktreeId?: string } }>([
     "terminal",
     "create",
     "--worktree",
     worktree,
     "--command",
-    opts.harness,
+    harness,
   ]);
   const handle = created.terminal?.handle;
   if (!handle) throw new Error("orca terminal create 未返回 handle");
-  const worktreeId = created.terminal?.worktreeId ?? "";
+  return { handle, worktreeId: created.terminal?.worktreeId ?? "" };
+}
 
-  // Give the harness a moment to boot its TUI before we type; best-effort.
+export interface RunResult {
+  runId: string;
+  status: string;
+}
+
+/**
+ * Start the coordinator loop. Orca then auto-executes the DAG: it dispatches
+ * ready tasks across idle workers, respects dependencies, and advances as
+ * workers report `worker_done` — until the graph is done. Returns immediately
+ * with a runId (the loop lives inside the Orca runtime).
+ */
+export async function startRun(spec: string, worktree = "active"): Promise<RunResult> {
+  const r = await runOrca<{ runId?: string; status?: string }>([
+    "orchestration",
+    "run",
+    "--spec",
+    spec,
+    "--worktree",
+    worktree,
+  ]);
+  return { runId: r.runId ?? "", status: r.status ?? "running" };
+}
+
+/** Stop the active coordinator run. No-op when none is running. */
+export async function stopRun(): Promise<void> {
   try {
-    await runOrca(["terminal", "wait", "--terminal", handle, "--for", "tui-idle", "--timeout-ms", "15000"]);
-  } catch {
-    // some harnesses never report tui-idle; proceed and type anyway
+    await runOrca(["orchestration", "run-stop"]);
+  } catch (e) {
+    if (!String(e).includes("No active coordinator run")) throw e;
   }
-
-  await runOrca(["terminal", "send", "--terminal", handle, "--text", opts.prompt, "--enter"]);
-  await runOrca(["orchestration", "task-update", "--id", opts.taskId, "--status", "dispatched"]);
-
-  return { handle, worktreeId };
-}
-
-/** Dispatch a task to an already-running terminal (coordinator-wired path). */
-export async function dispatchToTerminal(taskId: string, handle: string): Promise<void> {
-  await runOrca(["orchestration", "dispatch", "--task", taskId, "--to", handle, "--inject"]);
-  await runOrca(["orchestration", "task-update", "--id", taskId, "--status", "dispatched"]);
-}
-
-/** Set a task's status directly (e.g. mark completed/failed from the viewer). */
-export async function updateTaskStatus(taskId: string, status: OrcaTask["status"]): Promise<void> {
-  await runOrca(["orchestration", "task-update", "--id", taskId, "--status", status]);
 }
 
 /** Transform the raw task list into a nodes/edges DAG for the UI. */

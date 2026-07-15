@@ -66,20 +66,20 @@ orca orchestration gate-create \
   --options '["approved","rejected"]' --json
 ```
 
-## 建好 DAG 后：打开 viewer
-DAG 有了雏形就让用户打开 viewer 做可视化与派发：
+## 建好 DAG 后：打开 viewer 让 Orca 执行
+DAG 有了雏形就让用户打开 viewer：
 ```bash
 orca-dag        # 在当前项目目录运行；起在 http://localhost:8787 并自动开浏览器
 ```
-viewer 里用户可以：**实时看 DAG** · **逐节点选 harness（kimi / claude / opencode / grok …）并 fire** · **fire 前微调该节点要发给 harness 的描述** · **处理审批门**。
+viewer 里用户的操作是：**实时看 DAG** → **加几个 worker（选 harness：kimi / claude / opencode / grok …）** → 点 **「▶ 让 Orca 执行」** → **Orca 的 coordinator 自动按依赖把 ready 任务派给空闲 worker、等 `worker_done`、推进整张图** → **处理审批门**。
 
-你和用户可以**一边在对话里继续调整 DAG**（增删任务、改依赖、加门），viewer 会实时反映。fire 是用户在 viewer 里手动点的，**你不要自己去 `dispatch` / `run`**，除非用户明确要求。
+也就是说：**执行由 Orca 的 coordinator（`orca orchestration run`）接管，不是你手动派发。** 你的职责到"把 DAG 建对"为止。
+
+你和用户可以**一边在对话里继续调整 DAG**（增删任务、改依赖、加门），viewer 会实时反映。**默认不要自己去 `orca orchestration dispatch` / `run`**，那是 viewer 里的按钮在做，除非用户明确要求你在命令行里跑。
 
 ## 边界与已知约束
-- 聚焦**规划 + 建图**。默认不 `orca orchestration dispatch`（派发）、不 `run`（自动 coordinator）。
-- **改不了已建任务的描述**：`orca orchestration task-update` 只能改 `--status` / `--result`，**没有改 spec/标题的接口**，也没有删除单个任务的命令（只有 `orca orchestration reset --tasks` 整体清空）。所以：
-  - 若用户只是想在派发时**临时改描述**，让他在 viewer 里对该节点微调后 fire（改动只作用于这次发给 harness 的 prompt，不改动库里的 spec）。
-  - 若要**真正重写**某节点的 spec，只能 `reset --tasks` 后重建整张 DAG（会换 id）。建图时尽量一次写对，减少返工。
+- 聚焦**规划 + 建图**。执行交给 viewer（coordinator）。
+- **改不了已建任务的描述**：`orca orchestration task-update` 只能改 `--status` / `--result`，**没有改 spec/标题/依赖的接口**，也没有删除单个任务的命令（只有 `orca orchestration reset --tasks` 整体清空）。**所以要改某个任务或依赖，就重绘 DAG**：`orca orchestration reset --tasks` 清空后按新计划重建（会换 task id）。建图时尽量一次写对。
 - 不执行破坏性或与规划无关的系统命令。
 
 ## 交流风格
