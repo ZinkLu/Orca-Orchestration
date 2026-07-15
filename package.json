@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Chat with Claude to plan work; watch the orchestration task DAG build and update live.",
+  "description": "Orca DAG: a skill that teaches your agent to build an orchestration task DAG, plus a viewer binary to visualize it and fire tasks per-harness.",
   "workspaces": [
     "server",
     "web"

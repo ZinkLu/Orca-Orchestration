@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Chat } from "./components/Chat";
 import { DagView } from "./components/DagView";
 import { GatePanel } from "./components/GatePanel";
+import { NodePanel } from "./components/NodePanel";
 import { fetchDag, resetTasks } from "./api";
 import { STATUS_META, type DagResponse, type TaskStatus, type Theme } from "./types";
 
@@ -100,8 +100,8 @@ export default function App() {
         <div className="topbar__brand">
           <span className="topbar__logo">🐳</span>
           <div>
-            <div className="topbar__title">Orca Orchestration Studio</div>
-            <div className="topbar__subtitle">与 Claude 聊天规划 · 实时可视化任务 DAG</div>
+            <div className="topbar__title">Orca DAG Viewer</div>
+            <div className="topbar__subtitle">和 agent 聊天建图 · 在这里选 harness 逐个 fire</div>
           </div>
         </div>
         <div className="topbar__right">
@@ -127,10 +127,6 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <section className="pane pane--chat">
-          <Chat onTurnComplete={refresh} />
-        </section>
-
         <section className="pane pane--dag">
           <div className="dag-toolbar">
             <div className="legend">
@@ -151,37 +147,7 @@ export default function App() {
             <GatePanel gates={dag.gates} onResolved={refresh} />
 
             {selected && (
-              <aside className="detail">
-                <button className="detail__close" onClick={() => setSelectedId(null)}>
-                  ✕
-                </button>
-                <div
-                  className="detail__status"
-                  style={{ color: STATUS_META[selected.status].ink }}
-                >
-                  <span className="dot" style={{ background: STATUS_META[selected.status].color }} />
-                  {STATUS_META[selected.status].label}
-                </div>
-                <h3 className="detail__title">{selected.label}</h3>
-                <div className="detail__field">
-                  <span className="detail__key">Task ID</span>
-                  <code>{selected.id}</code>
-                </div>
-                <div className="detail__field">
-                  <span className="detail__key">Spec</span>
-                  <p className="detail__spec">{selected.spec}</p>
-                </div>
-                {selected.result && (
-                  <div className="detail__field">
-                    <span className="detail__key">Result</span>
-                    <pre className="detail__result">{selected.result}</pre>
-                  </div>
-                )}
-                <div className="detail__field detail__field--row">
-                  <span className="detail__key">创建于</span>
-                  <span>{selected.createdAt}</span>
-                </div>
-              </aside>
+              <NodePanel node={selected} onClose={() => setSelectedId(null)} onChanged={refresh} />
             )}
           </div>
         </section>

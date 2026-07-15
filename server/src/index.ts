@@ -4,8 +4,17 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join } from "node:path";
-import { runChatTurn } from "./claude";
-import { listGates, listTasks, runOrca, tasksToDag } from "./orca";
+import {
+  dispatchToTerminal,
+  fireTask,
+  listGates,
+  listTasks,
+  listTerminals,
+  runOrca,
+  tasksToDag,
+  updateTaskStatus,
+  type OrcaTask,
+} from "./orca";
 import { loadEmbeddedAssets } from "./webAssets";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,8 +24,17 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 const PORT = Number(process.env.PORT ?? 8787);
-// Directory Claude uses as its working dir when running orca / writing docs.
+// Directory used to resolve the `active` worktree when firing tasks.
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR ?? process.cwd();
+
+const VALID_STATUS: OrcaTask["status"][] = [
+  "pending",
+  "ready",
+  "dispatched",
+  "completed",
+  "failed",
+  "blocked",
+];
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, workspace: WORKSPACE_DIR });
@@ -33,47 +51,65 @@ app.get("/api/dag", async (_req, res) => {
   }
 });
 
-/** Streamed chat turn with Claude, emitting SSE frames (text / tool / done / error). */
-app.post("/api/chat", async (req, res) => {
-  const message = String(req.body?.message ?? "").trim();
-  const sessionId = (req.body?.sessionId as string | null) ?? null;
-  if (!message) {
-    res.status(400).json({ error: "message required" });
+/** Live terminals (running agent/shell sessions) a task can be dispatched to. */
+app.get("/api/terminals", async (_req, res) => {
+  try {
+    res.json({ terminals: await listTerminals() });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error).message ?? err) });
+  }
+});
+
+/**
+ * Fire a task on a chosen harness. Body: { taskId, harness, prompt, worktree? }.
+ * Spawns a terminal running `harness`, types `prompt` into it, marks dispatched.
+ */
+app.post("/api/fire", async (req, res) => {
+  const taskId = String(req.body?.taskId ?? "").trim();
+  const harness = String(req.body?.harness ?? "").trim();
+  const prompt = String(req.body?.prompt ?? "").trim();
+  const worktree = req.body?.worktree ? String(req.body.worktree).trim() : undefined;
+  if (!taskId || !harness || !prompt) {
+    res.status(400).json({ error: "taskId, harness, prompt required" });
     return;
   }
+  try {
+    const result = await fireTask({ taskId, harness, prompt, worktree });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error).message ?? err) });
+  }
+});
 
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
+/** Dispatch a task to an already-running terminal. Body: { taskId, handle }. */
+app.post("/api/dispatch", async (req, res) => {
+  const taskId = String(req.body?.taskId ?? "").trim();
+  const handle = String(req.body?.handle ?? "").trim();
+  if (!taskId || !handle) {
+    res.status(400).json({ error: "taskId, handle required" });
+    return;
+  }
+  try {
+    await dispatchToTerminal(taskId, handle);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error).message ?? err) });
+  }
+});
 
-  const send = (event: string, data: unknown) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
-
-  // Detect a real client disconnect via the RESPONSE stream. `req.on("close")`
-  // fires as soon as the POST body is consumed, which would abort immediately.
-  const ac = new AbortController();
-  let finished = false;
-  res.on("close", () => {
-    if (!finished) ac.abort();
-  });
-
-  await runChatTurn(message, sessionId, WORKSPACE_DIR, ac.signal, {
-    onText: (delta) => send("text", { delta }),
-    onTool: (tool) => send("tool", tool),
-    onDone: (sid) => {
-      finished = true;
-      send("done", { sessionId: sid });
-      res.end();
-    },
-    onError: (msg) => {
-      finished = true;
-      send("error", { message: msg });
-      res.end();
-    },
-  });
+/** Set a task's status directly. Body: { status }. */
+app.post("/api/tasks/:id/status", async (req, res) => {
+  const status = String(req.body?.status ?? "").trim() as OrcaTask["status"];
+  if (!VALID_STATUS.includes(status)) {
+    res.status(400).json({ error: `status must be one of ${VALID_STATUS.join(", ")}` });
+    return;
+  }
+  try {
+    await updateTaskStatus(req.params.id, status);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error).message ?? err) });
+  }
 });
 
 /** Resolve a decision gate (human approval). */
@@ -132,10 +168,8 @@ if (embedded.size > 0) {
 
 app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
-  console.log(`Orca Orchestration Studio → ${url}`);
+  console.log(`Orca DAG viewer → ${url}`);
   console.log(`Workspace dir: ${WORKSPACE_DIR}`);
-  // Only pop a browser when this process actually serves the UI (compiled
-  // binary or `npm start`), never in dev where the UI lives on Vite's port.
   if (servingUI && process.env.NO_OPEN !== "1") openBrowser(url);
 });
 

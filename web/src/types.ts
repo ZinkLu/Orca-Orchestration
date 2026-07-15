@@ -62,14 +62,21 @@ export const STATUS_META: Record<TaskStatus, StatusMeta> = {
   blocked: { label: "阻塞", color: "#B79FE0", bg: "#F2EDFB", ink: "#7B5CB8" },
 };
 
-export interface ToolEvent {
-  name: string;
-  command?: string;
+/** A live Orca terminal (running agent/shell) a task can be dispatched to. */
+export interface Terminal {
+  handle: string;
+  worktreePath: string;
+  worktreeId: string;
+  branch: string;
+  title: string;
+  connected: boolean;
+  writable: boolean;
 }
 
-export interface ChatMessage {
-  role: "user" | "assistant";
-  text: string;
-  tools?: ToolEvent[];
-  streaming?: boolean;
-}
+/**
+ * Harness presets shown in the node action panel. A harness is just the command
+ * launched in a fresh terminal — so this list is pure viewer config, not an Orca
+ * enum, and users can also type a custom command.
+ */
+export const HARNESSES = ["claude", "kimi", "opencode", "grok", "codex"] as const;
+export type Harness = (typeof HARNESSES)[number] | (string & {});

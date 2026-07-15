@@ -15,12 +15,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { layoutDag } from "../layout";
+import { isEdited } from "../overlay";
 import { STATUS_META, type DagResponse, type TaskStatus, type Theme } from "../types";
 
 type TaskNodeData = {
   label: string;
   status: TaskStatus;
   selected: boolean;
+  edited: boolean;
 };
 
 function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
@@ -37,9 +39,16 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
     >
       <Handle type="target" position={Position.Left} />
       <div className="task-node__title">{data.label}</div>
-      <div className="task-node__status" style={{ color: meta.ink }}>
-        <span className="dot" style={{ background: meta.color }} />
-        {meta.label}
+      <div className="task-node__row">
+        <div className="task-node__status" style={{ color: meta.ink }}>
+          <span className="dot" style={{ background: meta.color }} />
+          {meta.label}
+        </div>
+        {data.edited && (
+          <span className="task-node__edited" title="描述已在本地编辑">
+            ✎
+          </span>
+        )}
       </div>
       <Handle type="source" position={Position.Right} />
     </div>
@@ -68,7 +77,12 @@ function Flow({
       id: n.id,
       type: "task",
       position: { x: 0, y: 0 },
-      data: { label: n.label, status: n.status, selected: n.id === selectedId },
+      data: {
+        label: n.label,
+        status: n.status,
+        selected: n.id === selectedId,
+        edited: isEdited(n.id, n.spec),
+      },
     }));
     const rawEdges: Edge[] = dag.edges.map((e) => ({
       id: e.id,
@@ -95,9 +109,9 @@ function Flow({
         <div className="dag-empty__doodle">🖍️</div>
         <div className="dag-empty__title">还是一张白纸</div>
         <div className="dag-empty__hint">
-          在左边和 Claude 聊聊你的需求，让它拆解并画出编排任务。
+          在你的 agent 里加载 <code>orca-dag</code> skill，聊需求让它拆解并建图。
           <br />
-          任务和依赖会像蜡笔一样，在这里一笔笔长成一张 DAG。
+          任务和依赖会像蜡笔一样，在这里一笔笔长成一张 DAG —— 然后逐个选 harness 派发。
         </div>
       </div>
     );

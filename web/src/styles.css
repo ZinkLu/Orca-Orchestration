@@ -1,5 +1,5 @@
 /* ============================================================
-   Orca Orchestration Studio — "清新蜡笔速写本" theme
+   Orca DAG Viewer — "清新蜡笔速写本" theme
    Paper + crayon. Hand-drawn wobble lives on nodes & buttons;
    everything else stays soft and airy.
    ============================================================ */
@@ -22,6 +22,7 @@
   --meadow: #7fc98c;
   --butter: #f0b94e;
   --coral: #ea6b5e;
+  --flame: #f0975e;
   --lilac: #b79fe0;
 
   --shadow-sticker: 3px 3px 0 rgba(74, 71, 84, 0.16);
@@ -132,10 +133,9 @@ body {
   background: var(--blush-wash);
 }
 
-/* ---------- layout ---------- */
+/* ---------- layout (single full-width canvas) ---------- */
 .layout {
-  display: grid;
-  grid-template-columns: minmax(360px, 38%) 1fr;
+  display: flex;
   flex: 1;
   min-height: 0;
 }
@@ -143,181 +143,12 @@ body {
   min-height: 0;
   min-width: 0;
 }
-.pane--chat {
-  border-right: 2.5px dashed var(--line-strong);
-  display: flex;
-  flex-direction: column;
-  background: var(--paper);
-}
 .pane--dag {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
   background: var(--paper-2);
-}
-
-/* ---------- chat ---------- */
-.chat {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-.chat__scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.chat__welcome {
-  margin: auto 0;
-  color: var(--ink-soft);
-}
-.chat__welcome h2 {
-  font-family: var(--font-display);
-  color: var(--ink);
-  font-size: 22px;
-  margin: 0 0 10px;
-  letter-spacing: 0.5px;
-}
-.chat__welcome p {
-  font-size: 13.5px;
-  line-height: 1.75;
-}
-.chat__examples {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  margin-top: 20px;
-}
-.chat__examples button {
-  position: relative;
-  text-align: left;
-  padding: 13px 15px;
-  border-radius: 15px 12px 16px 11px;
-  border: 2px solid var(--line-strong);
-  background: var(--paper);
-  color: var(--ink);
-  cursor: pointer;
-  font-family: var(--font-body);
-  font-size: 13.5px;
-  font-weight: 500;
-  box-shadow: var(--shadow-sticker);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
-}
-.chat__examples button::before {
-  content: "✎";
-  margin-right: 8px;
-  color: var(--sky);
-}
-.chat__examples button:hover {
-  border-color: var(--sky);
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 rgba(74, 71, 84, 0.16);
-}
-
-.msg {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  max-width: 94%;
-}
-.msg--user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-.msg__role {
-  font-family: var(--font-display);
-  font-size: 12px;
-  color: var(--ink-soft);
-  letter-spacing: 0.4px;
-  padding: 0 4px;
-}
-.msg__text {
-  padding: 11px 15px;
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-  box-shadow: var(--shadow-soft);
-}
-.msg--assistant .msg__text {
-  background: var(--sky-wash);
-  border: 1.5px solid #cfe6f5;
-  border-radius: 6px 17px 17px 17px;
-  color: #2f4657;
-}
-.msg--user .msg__text {
-  background: var(--blush-wash);
-  border: 1.5px solid #f7d3d7;
-  border-radius: 17px 6px 17px 17px;
-  color: #5a3d40;
-}
-.msg__typing {
-  color: var(--ink-soft);
-  font-size: 13.5px;
-  font-style: italic;
-  padding: 4px 6px;
-}
-.msg__tools {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.tool-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 11px;
-  border-radius: 11px 9px 11px 8px;
-  background: var(--paper);
-  border: 1.5px solid var(--line-strong);
-  font-size: 12px;
-  overflow: hidden;
-  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
-}
-.tool-chip__icon {
-  color: var(--butter);
-  font-size: 13px;
-  flex-shrink: 0;
-}
-.tool-chip code {
-  color: var(--ink-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: "Fredoka", ui-monospace, monospace;
-  font-size: 11.5px;
-}
-
-.chat__composer {
-  display: flex;
-  gap: 10px;
-  padding: 14px;
-  border-top: 2.5px dashed var(--line-strong);
-  background: var(--paper);
-}
-.chat__composer textarea {
-  flex: 1;
-  resize: none;
-  background: var(--paper);
-  border: 2px solid var(--line-strong);
-  border-radius: 15px 13px 16px 12px;
-  color: var(--ink);
-  padding: 11px 14px;
-  font-size: 14px;
-  font-family: var(--font-body);
-  line-height: 1.55;
-}
-.chat__composer textarea::placeholder {
-  color: var(--ink-soft);
-}
-.chat__composer textarea:focus {
-  outline: none;
-  border-color: var(--sky);
-  box-shadow: 0 0 0 3px var(--sky-wash);
 }
 
 /* ---------- buttons (crayon stickers) ---------- */
@@ -333,7 +164,6 @@ body {
   background: var(--paper);
   box-shadow: var(--shadow-sticker);
   transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
-  align-self: flex-end;
 }
 .btn:hover:not(:disabled) {
   transform: translate(-1px, -1px);
@@ -346,14 +176,6 @@ body {
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.btn--send {
-  background: var(--sky);
-  color: #fff;
-}
-.btn--stop {
-  background: var(--coral);
-  color: #fff;
 }
 .btn--ghost {
   padding: 7px 15px;
@@ -440,6 +262,14 @@ body {
   font-size: 13.5px;
   line-height: 1.8;
 }
+.dag-empty__hint code {
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--sky-ink);
+  background: var(--sky-wash);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
 
 /* ---------- task node (crayon sticky) ---------- */
 .task-node {
@@ -495,6 +325,12 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.task-node__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
 .task-node__status {
   display: flex;
   align-items: center;
@@ -506,6 +342,10 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 45% 55% 50% 50%;
+}
+.task-node__edited {
+  font-size: 11px;
+  color: var(--flame);
 }
 .dot {
   display: inline-block;
@@ -537,7 +377,7 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  right: 16px;
+  right: 380px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -598,12 +438,12 @@ body {
   border-color: #c23b2e;
 }
 
-/* ---------- detail panel (a taped index card) ---------- */
-.detail {
+/* ---------- node action panel (a taped index card) ---------- */
+.node-panel {
   position: absolute;
   top: 16px;
   right: 16px;
-  width: 326px;
+  width: 348px;
   max-height: calc(100% - 32px);
   overflow-y: auto;
   background: var(--paper);
@@ -613,7 +453,7 @@ body {
   z-index: 5;
   box-shadow: var(--shadow-soft);
 }
-.detail::before {
+.node-panel::before {
   content: "";
   position: absolute;
   top: -11px;
@@ -625,7 +465,7 @@ body {
   border: 1px dashed rgba(179, 127, 22, 0.4);
   border-radius: 3px;
 }
-.detail__close {
+.node-panel__close {
   position: absolute;
   top: 12px;
   right: 14px;
@@ -635,59 +475,191 @@ body {
   cursor: pointer;
   font-size: 15px;
 }
-.detail__close:hover {
+.node-panel__close:hover {
   color: var(--ink);
 }
-.detail__status {
+.node-panel__status {
   display: flex;
   align-items: center;
   gap: 7px;
   font-family: var(--font-display);
   font-size: 12.5px;
 }
-.detail__status .dot {
+.node-panel__status .dot {
   width: 10px;
   height: 10px;
   border-radius: 45% 55% 50% 50%;
 }
-.detail__title {
+.node-panel__title {
   font-family: var(--font-display);
-  margin: 9px 0 16px;
+  margin: 9px 0 6px;
   font-size: 17px;
   color: var(--ink);
   letter-spacing: 0.3px;
 }
-.detail__field {
-  margin-bottom: 14px;
+.node-panel__id {
+  margin-bottom: 15px;
 }
-.detail__field--row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-.detail__key {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 11.5px;
-  letter-spacing: 0.4px;
-  color: var(--ink-soft);
-  margin-bottom: 5px;
-}
-.detail__field code {
+.node-panel__id code {
   font-family: "Fredoka", ui-monospace, monospace;
   font-size: 12px;
   color: var(--sky-ink);
   word-break: break-all;
 }
-.detail__spec {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  color: var(--ink);
+.node-panel__field {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
 }
-.detail__result {
+.node-panel__key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.edited-badge {
+  margin-left: auto;
+  color: var(--flame);
+  font-size: 11px;
+}
+.node-panel__spec {
+  width: 100%;
+  resize: vertical;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 12px 10px 13px 11px;
+  color: var(--ink);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  min-height: 96px;
+}
+.node-panel__spec:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+.node-panel__hint {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* harness picker chips */
+.harness-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.harness-picker button {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 11px 9px 12px 8px;
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+}
+.harness-picker button:hover {
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+.harness-picker button.active {
+  background: var(--sky-wash);
+  border-color: var(--sky);
+  color: var(--sky-ink);
+}
+.harness-custom {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 11px 9px 12px 8px;
+  color: var(--ink);
+  padding: 8px 11px;
+  font-size: 13px;
+  font-family: "Fredoka", ui-monospace, monospace;
+}
+.harness-custom:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+
+/* fire button — the warm primary action */
+.btn--fire {
+  width: 100%;
+  margin-top: 2px;
+  text-align: center;
+  background: var(--flame);
+  color: #fff;
+  border-color: #cc7440;
+}
+.node-panel__note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* manual status marks */
+.node-panel__marks {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 2px dashed var(--line-strong);
+}
+.mark-row {
+  display: flex;
+  gap: 8px;
+}
+.mark-row button {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: 10px 8px 11px 9px;
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.mark-row button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.mark-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.node-panel__info,
+.node-panel__err {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 9px 12px;
+  border-radius: 11px 9px 12px 8px;
+}
+.node-panel__info {
+  color: #3e9a55;
+  background: #ebf7ee;
+  border: 1.5px solid #bfe4c7;
+}
+.node-panel__err {
+  color: var(--coral);
+  background: var(--blush-wash);
+  border: 1.5px solid #f6c7c1;
+  word-break: break-word;
+}
+.node-panel__result {
   margin: 0;
   font-family: "Fredoka", ui-monospace, monospace;
   font-size: 12px;
@@ -697,7 +669,7 @@ body {
   padding: 9px;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 200px;
+  max-height: 180px;
   overflow: auto;
   color: var(--ink);
 }
@@ -717,11 +689,6 @@ body {
 }
 .react-flow__controls button:hover {
   background: var(--paper-2);
-}
-.react-flow__minimap {
-  border-radius: 12px;
-  border: 2px solid var(--line-strong);
-  box-shadow: var(--shadow-soft);
 }
 .react-flow__attribution {
   display: none;
@@ -755,40 +722,13 @@ body {
 }
 
 /* ============================================================
-   Motion — deliberate moments: things enter, Claude thinks,
-   text streams under a live caret, nodes pop onto the paper.
+   Motion — nodes pop onto the paper as the DAG grows.
    ============================================================ */
-.msg {
-  animation: msg-in 0.34s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
-}
-.tool-chip {
-  animation: tool-in 0.3s ease backwards;
-}
 /* `backwards` (not `forwards`) so the held end-state doesn't override the
    node's :hover lift once the entrance finishes. Plays once per node — React
    Flow reuses the DOM node across status polls, so it won't replay. */
 .task-node {
   animation: node-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
-}
-@keyframes msg-in {
-  from {
-    opacity: 0;
-    transform: translateY(9px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-@keyframes tool-in {
-  from {
-    opacity: 0;
-    transform: translateX(-10px) rotate(-1.5deg);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) rotate(0);
-  }
 }
 @keyframes node-in {
   from {
@@ -800,62 +740,17 @@ body {
     transform: scale(1);
   }
 }
-
-/* "Claude is thinking" — three bouncing crayon dots */
-.msg__text--thinking {
-  width: fit-content;
-  padding: 13px 16px;
+.node-panel {
+  animation: panel-in 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
 }
-.thinking-dots {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.thinking-dots i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--sky);
-  animation: think-bounce 1.1s ease-in-out infinite;
-}
-.thinking-dots i:nth-child(2) {
-  animation-delay: 0.16s;
-}
-.thinking-dots i:nth-child(3) {
-  animation-delay: 0.32s;
-}
-@keyframes think-bounce {
-  0%,
-  80%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.35;
-  }
-  40% {
-    transform: translateY(-6px);
-    opacity: 1;
-  }
-}
-
-/* live caret trailing the streaming text */
-.caret {
-  display: inline-block;
-  width: 3px;
-  height: 1.05em;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  background: var(--ink);
-  border-radius: 1.5px;
-  animation: caret-blink 1s steps(1) infinite;
-}
-@keyframes caret-blink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
+@keyframes panel-in {
+  from {
     opacity: 0;
+    transform: translateX(12px) rotate(0.4deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(0);
   }
 }
 
@@ -919,42 +814,25 @@ body {
 [data-theme="doodle"] .topbar {
   border-bottom: 2px solid var(--ink);
 }
-[data-theme="doodle"] .pane--chat {
-  border-right: 2px solid var(--ink);
-}
 [data-theme="doodle"] .dag-toolbar {
   border-bottom: 2px solid var(--ink);
 }
-[data-theme="doodle"] .chat__composer {
-  border-top: 2px solid var(--ink);
-}
-[data-theme="doodle"] .chat__composer textarea {
-  border-color: var(--ink);
-}
 
 /* ink-outlined chrome */
-[data-theme="doodle"] .btn--send {
-  background: #cfe8f7;
-  color: var(--ink);
-}
-[data-theme="doodle"] .btn--stop {
-  background: #f8d2cc;
-  color: var(--ink);
-}
-[data-theme="doodle"] .chat__examples button,
-[data-theme="doodle"] .tool-chip,
-[data-theme="doodle"] .detail,
+[data-theme="doodle"] .harness-picker button,
+[data-theme="doodle"] .harness-custom,
+[data-theme="doodle"] .mark-row button,
+[data-theme="doodle"] .node-panel,
+[data-theme="doodle"] .node-panel__spec,
 [data-theme="doodle"] .conn {
   border-color: var(--ink);
 }
-[data-theme="doodle"] .msg--assistant .msg__text {
-  border: 1.8px solid var(--ink);
-}
-[data-theme="doodle"] .msg--user .msg__text {
-  border: 1.8px solid var(--ink);
-}
 [data-theme="doodle"] .gate {
   border: 2px solid var(--ink);
+}
+[data-theme="doodle"] .btn--fire {
+  color: var(--ink);
+  border-color: var(--ink);
 }
 [data-theme="doodle"] .theme-toggle,
 [data-theme="doodle"] .theme-toggle button + button {

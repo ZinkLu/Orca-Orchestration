@@ -1,16 +1,17 @@
 #!/usr/bin/env node
-// Build a self-contained Bun binary of Orca Orchestration Studio.
+// Build a self-contained Bun binary of the Orca DAG viewer.
 //
 //   node scripts/build-binary.mjs
 //
 // Steps:
 //   1. `vite build`  → web/dist
 //   2. embed web/dist as a base64 map in server/src/generated/webAssets.ts
-//   3. `bun build --compile` → dist/orca-studio (bundles server + SDK + assets)
+//   3. `bun build --compile` → dist/orca-dag (bundles the viewer server + assets)
 //
 // The produced binary is portable: run it in ANY project directory and it uses
-// that directory as the workspace. It still needs a logged-in `claude` CLI on
-// PATH (for subscription auth) and the `orca` CLI (for orchestration).
+// that directory as the workspace. It needs only the `orca` CLI on PATH — the
+// planning "brain" lives in your own agent via the orca-dag skill, so the
+// viewer no longer embeds or requires the Claude Agent SDK.
 //
 // Cross-compile for another OS/arch by passing a Bun target, e.g.:
 //   TARGET=bun-linux-x64  node scripts/build-binary.mjs
@@ -27,7 +28,7 @@ const distWeb = join(root, "web", "dist");
 const genDir = join(root, "server", "src", "generated");
 const genFile = join(genDir, "webAssets.ts");
 const outDir = join(root, "dist");
-const outName = process.env.OUT_NAME ?? "orca-studio";
+const outName = process.env.OUT_NAME ?? "orca-dag";
 const outFile = join(outDir, outName);
 const target = process.env.TARGET; // optional Bun --target for cross-compile
 
@@ -106,5 +107,6 @@ try {
 const finalPath = existsSync(outFile) ? outFile : `${outFile}.exe`;
 const sizeMB = (statSync(finalPath).size / (1024 * 1024)).toFixed(0);
 console.log(`\n✅ Built ${relative(root, finalPath)} (${sizeMB} MB)`);
-console.log(`   Run it inside any project:  cd ~/some/project && ${relative(root, finalPath)}`);
+console.log(`   Install globally, then run inside any project:`);
+console.log(`     cp ${relative(root, finalPath)} /usr/local/bin/orca-dag && cd ~/some/project && orca-dag`);
 console.log(`   It serves http://localhost:8787 and uses that project dir as the workspace.`);

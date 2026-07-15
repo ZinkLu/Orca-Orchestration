@@ -136,6 +136,92 @@ function normalizeGate(g: Record<string, unknown>): Gate {
   };
 }
 
+/** A live Orca-managed terminal (a running agent/shell session). */
+export interface OrcaTerminal {
+  handle: string;
+  worktreePath: string;
+  worktreeId: string;
+  branch: string;
+  title: string;
+  connected: boolean;
+  writable: boolean;
+}
+
+/** List live terminals — these are the sessions a task can be dispatched to. */
+export async function listTerminals(): Promise<OrcaTerminal[]> {
+  const result = await runOrca<{ terminals?: Record<string, unknown>[] }>(["terminal", "list"]);
+  return (result.terminals ?? []).map((t) => ({
+    handle: String(t.handle ?? ""),
+    worktreePath: String(t.worktreePath ?? ""),
+    worktreeId: String(t.worktreeId ?? ""),
+    branch: String(t.branch ?? "").replace(/^refs\/heads\//, ""),
+    title: String(t.title ?? "").trim(),
+    connected: Boolean(t.connected),
+    writable: Boolean(t.writable),
+  }));
+}
+
+export interface FireResult {
+  handle: string;
+  worktreeId: string;
+}
+
+/**
+ * Fire a task on a chosen harness.
+ *
+ * Per the branch's design (option A): the harness is just the command run in a
+ * fresh terminal, and the (possibly edited) `prompt` is typed into it — so what
+ * the worker sees is the user's fine-tuned text, not necessarily the stored
+ * `task.spec`. We then flip the task to `dispatched` so the DAG recolors.
+ *
+ * `orca orchestration dispatch` (coordinator-wired) is intentionally NOT used
+ * here: it builds its preamble from the immutable stored spec, which would
+ * ignore the user's edit. This keeps "edit → fire" honest and harness-agnostic
+ * (kimi / claude / opencode / grok are all just commands).
+ */
+export async function fireTask(opts: {
+  taskId: string;
+  harness: string;
+  prompt: string;
+  worktree?: string;
+}): Promise<FireResult> {
+  const worktree = opts.worktree?.trim() || "active";
+  const created = await runOrca<{ terminal?: { handle?: string; worktreeId?: string } }>([
+    "terminal",
+    "create",
+    "--worktree",
+    worktree,
+    "--command",
+    opts.harness,
+  ]);
+  const handle = created.terminal?.handle;
+  if (!handle) throw new Error("orca terminal create 未返回 handle");
+  const worktreeId = created.terminal?.worktreeId ?? "";
+
+  // Give the harness a moment to boot its TUI before we type; best-effort.
+  try {
+    await runOrca(["terminal", "wait", "--terminal", handle, "--for", "tui-idle", "--timeout-ms", "15000"]);
+  } catch {
+    // some harnesses never report tui-idle; proceed and type anyway
+  }
+
+  await runOrca(["terminal", "send", "--terminal", handle, "--text", opts.prompt, "--enter"]);
+  await runOrca(["orchestration", "task-update", "--id", opts.taskId, "--status", "dispatched"]);
+
+  return { handle, worktreeId };
+}
+
+/** Dispatch a task to an already-running terminal (coordinator-wired path). */
+export async function dispatchToTerminal(taskId: string, handle: string): Promise<void> {
+  await runOrca(["orchestration", "dispatch", "--task", taskId, "--to", handle, "--inject"]);
+  await runOrca(["orchestration", "task-update", "--id", taskId, "--status", "dispatched"]);
+}
+
+/** Set a task's status directly (e.g. mark completed/failed from the viewer). */
+export async function updateTaskStatus(taskId: string, status: OrcaTask["status"]): Promise<void> {
+  await runOrca(["orchestration", "task-update", "--id", taskId, "--status", status]);
+}
+
 /** Transform the raw task list into a nodes/edges DAG for the UI. */
 export function tasksToDag(tasks: OrcaTask[]): { nodes: DagNode[]; edges: DagEdge[] } {
   const idSet = new Set(tasks.map((t) => t.id));

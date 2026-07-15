@@ -1,145 +1,120 @@
-# Orca Orchestration Studio
+# Orca DAG — skill + viewer
 
-一个基于 **Claude Agent SDK** 的界面：**以与 Claude 的对话为入口**做需求规划，Claude 把执行计划拆解成 **Orca orchestration 任务 DAG**，右侧**实时可视化**这张 DAG 并随任务状态变色。
+把「和 agent 聊天规划」与「可视化 + 派发」拆成两个独立模块：
 
-聚焦"规划 + DAG 可视化"：Claude 负责把任务、依赖、审批门建进 Orca 编排状态；界面负责实时把它画出来。
+1. **skill**（`skill/SKILL.md`）：教**你自己的 agent**（Claude Code / kimi / …）如何把一个需求拆成 **Orca orchestration 的任务 DAG**，以及建图规范。规划的"大脑"在你的 agent 里，**不再内嵌 Claude Agent SDK**。
+2. **viewer**（`server/` + `web/`，编译成全局二进制 `orca-dag`）：连到 Orca 的编排状态，**实时可视化**这张 DAG，并支持**逐节点选 harness（kimi / claude / opencode / grok …）并 fire**、**fire 前微调发给 harness 的描述**、处理**审批门**。
 
-视觉上提供两套可切换的手绘主题（顶栏 🖍️蜡笔 / ✏️涂鸦，记忆到 localStorage），把"在纸上画计划"的隐喻贯彻到底：
+> 这是 MVP（内嵌 SDK 的聊天版）之后的重构分支：聊天入口移出应用、交给用户已有的 agent；本仓库只保留「建图规范（skill）」和「可视化 + 派发（viewer）」。
 
-- **🖍️ 蜡笔**：暖色纸纹 + 圆点画布、站酷快乐体、彩色蜡笔手绘抖动边框、图钉便签式审批门。
-- **✏️ 涂鸦**：方格笔记本纸、Kalam 手写体、黑墨钢笔描边 + 更粗手抖、黑墨箭头（Excalidraw 白板气质）。
+![蜡笔风：全宽 DAG + 选中节点的操作面板（编辑描述 / 选 harness / Fire）](docs/screenshot.png)
 
-![清新蜡笔风：左侧与 Claude 聊天，右侧手绘风实时任务 DAG](docs/screenshot.png)
-
-![涂鸦风：方格纸 + 黑墨钢笔描边的同一张 DAG](docs/screenshot-doodle.png)
+![涂鸦风：方格纸 + 黑墨钢笔描边的同一张 DAG 与面板](docs/screenshot-doodle.png)
 
 ## 它是怎么工作的
 
 ```
-┌──────────────────────┐        Claude Agent SDK (query)         ┌───────────────┐
-│  浏览器 (web/, React) │ ──POST /api/chat (SSE 流式)──▶ server ──▶│  claude 订阅   │
-│  · 聊天面板           │ ◀──text / tool / done 事件──            │  (无需 API Key)│
-│  · React Flow DAG     │                                         └───────┬───────┘
-│                       │                                    Bash: orca …  │
-│                       │ ──GET /api/dag (每 2s 轮询)──▶ server ──▶ orca orchestration
-│                       │ ◀── {nodes, edges, gates} ──         task-list --json
-└──────────────────────┘
+   你的 agent（加载 orca-dag skill）              orca-dag viewer（全局二进制）
+ ┌───────────────────────────────┐            ┌──────────────────────────────┐
+ │  和你聊需求 → 拆解 → 建图        │            │  轮询 task-list → 画 DAG        │
+ │  Bash: orca orchestration      │            │  选 harness + Fire 某节点       │
+ │        task-create / gate-*    │            │  fire 前微调描述（本地 overlay）  │
+ └───────────────┬───────────────┘            └───────────────┬──────────────┘
+                 │  写编排状态                                    │  读/派发
+                 ▼                                              ▼
+            ┌──────────────────────  Orca 编排状态  ──────────────────────┐
+            │  tasks / deps / gates   ·   terminals（各 harness 会话）      │
+            └──────────────────────────────────────────────────────────┘
 ```
 
-1. 你在左侧描述需求。后端用 Claude Agent SDK 的 `query()` 驱动一个"编排协调员"角色的 Claude，通过 **Bash 直接调用 `orca orchestration` CLI** 来创建任务与依赖。
-2. Claude 每次运行的 orca 命令会作为 `tool` 事件推给前端，显示成工具芯片。回复文本以 SSE 流式返回。
-3. 前端每 2 秒轮询 `GET /api/dag`，后端把 `orca orchestration task-list --json` 转成 `{nodes, edges}`（依赖来自每个 task 的 `deps` 字段），用 **dagre** 自动布局、**React Flow** 渲染。任务状态 `pending / ready / dispatched / completed / failed / blocked` 映射为节点颜色，实时更新。
-4. 需要人工审批时，Claude 会 `orca orchestration gate-create`，DAG 上浮出"批准/驳回"按钮，点击调用 `gate-resolve`。
-
-对话通过 SDK 的 `resume`（session id）跨 HTTP 请求续接，所以是连续多轮对话。
+1. 你在**自己的 agent** 里聊需求。agent 加载 `orca-dag` skill，按规范用 `orca orchestration task-create --deps …` 把任务与依赖建进 Orca。
+2. DAG 有了雏形，agent 让你打开 viewer（`orca-dag`）。viewer 每 2 秒轮询 `orca orchestration task-list --json`，用 **dagre** 布局、**React Flow** 渲染，状态实时变色。
+3. 你在 viewer 里点某个 `ready` 节点 → 选 harness → **Fire**。viewer 会 `orca terminal create --command "<harness>"` 起一个会话，把（可能微调过的）描述 `terminal send` 进去，并把任务标为 `dispatched`。
+4. 你可以继续在 agent 对话里增删任务、改依赖、加审批门，viewer 实时反映。
 
 ## 前置条件
 
-- **Node.js ≥ 20**（本项目在 v22 上验证）
-- **Orca 桌面/运行时在运行**：`orca status --json` 应返回 `runtime.state = "ready"`。若未启动：`orca open`
-- **已登录的 `claude` CLI**：SDK 复用 Claude Code 的订阅登录，**无需设置 `ANTHROPIC_API_KEY`**（若设置了也会被使用）
-- **Bun**（可选，仅在 `npm run build:binary` 打单文件二进制时需要）
+- **Orca 运行中**：`orca status --json` 的 `result.runtime.state` 应为 `"ready"`；否则先 `orca open`。
+- **一个能跑 skill 的 agent**（建图侧）：Claude Code、或任何能读 `SKILL.md` 并执行 Bash 的 agent。
+- **viewer 侧只依赖 `orca` CLI** —— 不需要 `claude`、不需要 `ANTHROPIC_API_KEY`（大脑在你的 agent 里）。
+- **Bun**（可选，仅打二进制时需要）。**Node.js ≥ 20**（跑 dev / `npm start` 时需要）。
 
-## 快速开始
+## 模块 1 · 安装 skill
+
+把 `skill/` 作为一个 skill 让 agent 能加载（例如软链到 Claude Code 的 skills 目录）：
 
 ```bash
-# 1. 安装依赖（npm workspaces，一次装全部）
+ln -s "$PWD/skill" ~/.claude/skills/orca-dag      # 或直接拷贝
+```
+
+然后在 agent 里聊你的需求，它会按 `SKILL.md` 的规范把 DAG 建进 Orca，并在建好后提示你运行 `orca-dag` 打开 viewer。
+
+## 模块 2 · 运行 viewer
+
+开发（前端 5173 + 后端 8787，vite 代理 /api）：
+
+```bash
 npm install
-
-# 2. 启动开发环境（同时起后端 8787 + 前端 5173，vite 代理 /api）
 npm run dev
-
-# 3. 打开 http://localhost:5173
+# 打开 http://localhost:5173
 ```
 
-生产模式（单端口）：
+打成全局二进制（推荐，可在任意项目目录直接调用）：
 
 ```bash
-npm run build      # 构建前端到 web/dist
-npm start          # 后端在 8787 同时托管 SPA 与 /api
-# 打开 http://localhost:8787
+npm run build:binary                 # 产出 dist/orca-dag（约 60 MB，前端已内嵌）
+cp dist/orca-dag /usr/local/bin/     # 装到 PATH
+
+cd ~/any/project
+orca-dag                             # 起在 http://localhost:8787，自动开浏览器；用当前目录当工作区
 ```
 
-## 打包成单文件二进制（在任意项目里调用）
+交叉编译（目标机自带 `orca` 即可）：`TARGET=bun-linux-x64 npm run build:binary`。
+开关：`PORT`（默认 8787）、`NO_OPEN=1`（不自动开浏览器）、`WORKSPACE_DIR`（覆盖 `active` worktree 的工作区）。
 
-把前端 + 后端 + Claude Agent SDK 编译成一个 **自包含的 Bun 二进制**，之后可以 `cd` 到任何项目目录直接运行，用 **那个目录**当工作区：
+## viewer 能做什么
 
-```bash
-npm run build:binary          # 产出 dist/orca-studio（约 60 MB）
-
-cd ~/some/other/project
-/path/to/dist/orca-studio     # 起在 http://localhost:8787，自动打开浏览器
-# 这个项目目录即 Claude 运行 orca / 写 PRD、TECH_SPEC 的工作区
-```
-
-- **前端资源已内嵌**进二进制（`web/dist` 在编译期被打成 base64 一起打包），所以单文件即可运行、无需附带任何资源目录。
-- **仍依赖两个外部 CLI**（二进制只是复用它们，不内置）：
-  - **`claude`**（已登录）：复用 Claude Code 订阅登录做鉴权。编译后的二进制无法用 SDK 默认方式定位自带的原生 CLI，因此运行时会从 `PATH` 解析 `claude` 并传给 SDK 的 `pathToClaudeCodeExecutable`。可用 `CLAUDE_CLI_PATH` 覆盖。
-  - **`orca`**：编排命令照常通过子进程调用。
-- **交叉编译**到别的平台（目标机同样需要自带 `claude` + `orca`）：
-  ```bash
-  TARGET=bun-linux-x64   npm run build:binary
-  TARGET=bun-windows-x64 npm run build:binary
-  ```
-- 常用开关：`PORT`（默认 8787）、`NO_OPEN=1`（不自动打开浏览器）、`WORKSPACE_DIR`（覆盖工作区，默认取启动时 `cwd`）。
-
-## 试一试
-
-在左侧输入，例如：
-
-> 帮我规划一个多人协作的待办事项 SaaS 的 MVP
-
-Claude 会澄清需求、给方案，并逐步创建任务与依赖 —— 右侧 DAG 会实时长出来。也可以直接下达：
-
-> 把它拆成 setup → models →（api、frontend 并行）→ integration 的任务 DAG
-
-## 配置（环境变量）
-
-| 变量 | 默认 | 说明 |
-| --- | --- | --- |
-| `PORT` | `8787` | 后端端口 |
-| `WORKSPACE_DIR` | 启动时的 `cwd` | Claude 运行 orca / 写 PRD、TECH_SPEC 文档的工作目录 |
-| `DEBUG_SDK` | — | 设为任意值可把 SDK stderr 打到服务端日志 |
+- **实时可视化** DAG，节点状态 `pending / ready / dispatched / completed / failed / blocked` 映射颜色。
+- **选 harness 并 Fire**：点节点 → 选 `claude / kimi / opencode / grok / codex` 或自定义命令 → 🔥 Fire。
+- **fire 前微调描述**：编辑只存在浏览器本地（overlay），fire 时作为 prompt 发给 harness；节点上标 `✎ 已编辑`。
+- **手动标记状态**：就绪 / 完成 / 失败 —— 手动驱动流程时用来推进 DAG（把上游标完成，下游会转 `ready`）。
+- **审批门**：agent `gate-create` 后，DAG 上浮出「批准 / 驳回」。
+- **两套手绘主题**：🖍️ 蜡笔 / ✏️ 涂鸦，顶栏切换，记忆到 localStorage。
 
 ## HTTP 接口
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
-| `POST` | `/api/chat` | 一轮对话，SSE 流：`event: text/tool/done/error`。请求体 `{ message, sessionId }` |
 | `GET` | `/api/dag` | 当前 DAG：`{ nodes, edges, gates, generatedAt }` |
-| `POST` | `/api/gates/:id/resolve` | 解决审批门，请求体 `{ resolution }` |
+| `GET` | `/api/terminals` | 活动终端（可派发目标）列表 |
+| `POST` | `/api/fire` | `{ taskId, harness, prompt }`：起 harness 会话、发送 prompt、标 dispatched |
+| `POST` | `/api/dispatch` | `{ taskId, handle }`：派发到已有终端（coordinator 协议） |
+| `POST` | `/api/tasks/:id/status` | `{ status }`：直接改任务状态 |
+| `POST` | `/api/gates/:id/resolve` | `{ resolution }`：解决审批门 |
 | `POST` | `/api/reset` | `orca orchestration reset --tasks` 清空任务 |
 | `GET` | `/api/health` | 健康检查 |
 
 ## 代码结构
 
 ```
+skill/SKILL.md            建图规范 + spec 写作约定 + 如何开 viewer + 边界
 server/src/
-  index.ts          Express 服务：SSE 聊天、DAG、审批、reset；生产时托管 SPA
-  claude.ts         Claude Agent SDK 驱动：流式文本、抽取工具调用、session 续接
-  systemPrompt.ts   "编排协调员" 系统提示词（三阶段工作流 + orca 命令用法 + 边界）
-  orca.ts           orca CLI 封装 + task-list → DAG(nodes/edges) 转换
+  index.ts                Express 服务：DAG / terminals / fire / dispatch / status / gates / reset；托管 SPA
+  orca.ts                 orca CLI 封装：task-list→DAG、terminals、fire（terminal create + send）、状态更新
+  webAssets.ts            编译期内嵌前端资源的加载器（生产二进制用）
 web/src/
-  App.tsx           两栏主壳、每 2s 轮询 DAG、节点详情面板
-  components/Chat.tsx      流式聊天 + 工具芯片
-  components/DagView.tsx   React Flow 图 + 自定义状态节点 + minimap
+  App.tsx                 全宽 DAG 主壳、每 2s 轮询、主题切换
+  components/DagView.tsx   React Flow 图 + 自定义状态节点（含"已编辑"标）
+  components/NodePanel.tsx 节点操作面板：编辑描述 / 选 harness / Fire / 标状态
   components/GatePanel.tsx 审批门浮层
-  layout.ts         dagre 自动布局（确定性，状态刷新不抖动）
-  types.ts / api.ts 共享类型 / SSE 客户端
+  overlay.ts              每任务本地状态（编辑后的描述 / 选定 harness），localStorage
+  layout.ts / types.ts / api.ts
+scripts/build-binary.mjs  vite build → 内嵌资源 → bun --compile → dist/orca-dag
 ```
 
 ## 设计说明与边界
 
-- **驱动方式**：Claude 通过 Bash 直接调 `orca` CLI（解耦清晰：界面只需轮询 `task-list` 即可反映 DAG 变化）。系统提示词把它约束在编排命令 + 规划文档写作上，`permissionMode: "bypassPermissions"` 让本地单用户工具免去逐条授权。这是本地开发工具的取舍——如需更强隔离，可改用 `canUseTool` 白名单或 `PreToolUse` hook。
-- **不含执行阶段**：本界面负责建 DAG（任务/依赖/审批门），**不会**自动 `dispatch`/`run` 去拉起 worker 终端。若要真正跑执行（派发给 kimi/opencode、`orca orchestration run` 自动 coordinator），可在此基础上加一层执行编排——`orca.ts` 已封好 `runOrca()`，接 `dispatch` / `check --wait` / `run` 即可。
-- **不继承全局配置**：SDK 以 `settingSources: []` 启动，不会把机器上的全局 `CLAUDE.md` / settings 带进协调员。
-
-### 视觉主题：两套可切换的手绘风
-
-顶栏切换器在 `🖍️蜡笔` / `✏️涂鸦` 间切换，写入 `localStorage`。实现是一套 `data-theme` + CSS 变量覆盖：同一份 DAG 标记，两种画法，无需改组件。
-
-- **共用签名元素**：`web/src/App.tsx` 的 SVG `feTurbulence`+`feDisplacementMap` 滤镜给节点边框（`.task-node::before`）和依赖线（`.react-flow__edge-path`）加手绘抖动。蜡笔用 `#crayon`/`#crayon-edge`（柔和），涂鸦用 `#doodle`/`#doodle-edge`（更粗、频率更高的钢笔抖）。调幅度改滤镜的 `scale`。
-- **🖍️ 蜡笔**：纸 `#FCFAF4` + 石墨墨 `#4A4754`；状态蜡笔色见 `web/src/types.ts` 的 `STATUS_META`；圆点画布、彩色描边、贴纸按钮。拉丁用 **Fredoka**，**所有中文**（标题与正文）用 **站酷快乐体**。
-- **✏️ 涂鸦**：纸 `#FBFBF7` + 钢笔墨 `#2C2A30`；保留状态浅填充但改**黑墨描边**；方格线画布、黑墨箭头、墨线分隔（`styles.css` 里的 `:root[data-theme="doodle"]` 与 `[data-theme="doodle"] …` 覆盖块）。拉丁用 **Kalam**，**所有中文**用 **站酷庆科黄油**。
-- **字体统一**：`--font-body` 的字体栈把 CJK 手绘字体排在拉丁字体之后，浏览器逐字回落，于是拉丁走手写体、每个汉字走对应主题的手绘体 —— 正文不再回落到系统黑体。
-- **动效**：消息气泡入场、工具芯片滑入、DAG 节点弹入（`node-in`，靠 `backwards` 填充只播一次且不破坏 hover）；流式时「思考」是三颗弹跳点，正文尾部跟一个闪烁光标。全部在 `prefers-reduced-motion` 下自动关闭；键盘 `:focus-visible` 可见。
+- **大脑外移**：规划由你已有的 agent 承担（skill 提供规范），viewer 不再内嵌 Claude Agent SDK，也不再需要机器上装 `claude`。解耦更彻底：agent 只管写编排状态，viewer 只管读 + 派发。
+- **harness = 终端里的命令**：Orca 没有固定的 harness 枚举，"选 harness" 就是选 `orca terminal create --command "<cmd>"` 里那个命令。所以 viewer 的 harness 列表是纯前端配置，可随意增删、支持自定义。
+- **描述改不了（已知约束）**：`orca orchestration task-update` 只能改 `--status` / `--result`，**没有改 spec 的接口**，也没有删除单个任务的命令（只有 `reset` 整体清空）。因此"微调描述"走**本地 overlay**：编辑存在浏览器里，fire 时作为 prompt 发给 harness，Orca 里存的原始 spec 不变（节点标 `✎ 已编辑`）。要真正重写某节点，只能 `reset` 后重建。
+- **fire 语义（v1）**：`terminal create --command harness` → `terminal send` 发送（微调后的）描述 → `task-update --status dispatched`。这条路径尊重本地 overlay（发出去的就是你编辑后的文本），且对任意 harness 命令通用。若想要 coordinator 协议接管（worker 自动回报完成），可改用 `/api/dispatch`（`orca orchestration dispatch --inject`，但它的 preamble 取自不可编辑的原始 spec）。
