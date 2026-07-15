@@ -1,0 +1,965 @@
+/* ============================================================
+   Orca Orchestration Studio — "清新蜡笔速写本" theme
+   Paper + crayon. Hand-drawn wobble lives on nodes & buttons;
+   everything else stays soft and airy.
+   ============================================================ */
+
+:root {
+  --paper: #fcfaf4;
+  --paper-2: #f5f1e6;
+  --paper-3: #efe9db;
+  --ink: #4a4754;
+  --ink-soft: #8b8798;
+  --line: #e3ddcd;
+  --line-strong: #d3ccb8;
+
+  --sky: #7bb7e0;
+  --sky-ink: #3e7ba6;
+  --sky-wash: #eaf4fb;
+  --blush: #f2a0a6;
+  --blush-ink: #c85f66;
+  --blush-wash: #fdeef0;
+  --meadow: #7fc98c;
+  --butter: #f0b94e;
+  --coral: #ea6b5e;
+  --lilac: #b79fe0;
+
+  --shadow-sticker: 3px 3px 0 rgba(74, 71, 84, 0.16);
+  --shadow-soft: 0 8px 22px rgba(74, 71, 84, 0.09);
+
+  --font-display: "ZCOOL KuaiLe", "Fredoka", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* Latin falls to Fredoka; every CJK glyph falls to ZCOOL KuaiLe so body text
+     is hand-drawn too, matching the headings. */
+  --font-body: "Fredoka", "ZCOOL KuaiLe", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+
+  font-family: var(--font-body);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--ink);
+  background-color: var(--paper);
+  /* faint paper grain */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+}
+
+/* hidden SVG holding the crayon displacement filters */
+.crayon-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---------- top bar (a taped paper header) ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 22px;
+  background: var(--paper);
+  border-bottom: 2.5px dashed var(--line-strong);
+}
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.topbar__logo {
+  font-size: 30px;
+  filter: drop-shadow(1px 1px 0 rgba(74, 71, 84, 0.15));
+  transform: rotate(-6deg);
+}
+.topbar__title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+  letter-spacing: 0.5px;
+}
+.topbar__subtitle {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  padding: 5px 13px;
+  border-radius: 13px 11px 12px 10px;
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+.conn::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.conn--ok {
+  color: #58ab6b;
+  border-color: #bfe4c7;
+  background: #eef8f0;
+}
+.conn--bad {
+  color: var(--coral);
+  border-color: #f6c7c1;
+  background: var(--blush-wash);
+}
+
+/* ---------- layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 38%) 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.pane {
+  min-height: 0;
+  min-width: 0;
+}
+.pane--chat {
+  border-right: 2.5px dashed var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+.pane--dag {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--paper-2);
+}
+
+/* ---------- chat ---------- */
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.chat__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.chat__welcome {
+  margin: auto 0;
+  color: var(--ink-soft);
+}
+.chat__welcome h2 {
+  font-family: var(--font-display);
+  color: var(--ink);
+  font-size: 22px;
+  margin: 0 0 10px;
+  letter-spacing: 0.5px;
+}
+.chat__welcome p {
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+.chat__examples {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 20px;
+}
+.chat__examples button {
+  position: relative;
+  text-align: left;
+  padding: 13px 15px;
+  border-radius: 15px 12px 16px 11px;
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: var(--shadow-sticker);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.chat__examples button::before {
+  content: "✎";
+  margin-right: 8px;
+  color: var(--sky);
+}
+.chat__examples button:hover {
+  border-color: var(--sky);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 rgba(74, 71, 84, 0.16);
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 94%;
+}
+.msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.msg__role {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--ink-soft);
+  letter-spacing: 0.4px;
+  padding: 0 4px;
+}
+.msg__text {
+  padding: 11px 15px;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: var(--shadow-soft);
+}
+.msg--assistant .msg__text {
+  background: var(--sky-wash);
+  border: 1.5px solid #cfe6f5;
+  border-radius: 6px 17px 17px 17px;
+  color: #2f4657;
+}
+.msg--user .msg__text {
+  background: var(--blush-wash);
+  border: 1.5px solid #f7d3d7;
+  border-radius: 17px 6px 17px 17px;
+  color: #5a3d40;
+}
+.msg__typing {
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-style: italic;
+  padding: 4px 6px;
+}
+.msg__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  border-radius: 11px 9px 11px 8px;
+  background: var(--paper);
+  border: 1.5px solid var(--line-strong);
+  font-size: 12px;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
+}
+.tool-chip__icon {
+  color: var(--butter);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.tool-chip code {
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.chat__composer {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  border-top: 2.5px dashed var(--line-strong);
+  background: var(--paper);
+}
+.chat__composer textarea {
+  flex: 1;
+  resize: none;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 15px 13px 16px 12px;
+  color: var(--ink);
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  line-height: 1.55;
+}
+.chat__composer textarea::placeholder {
+  color: var(--ink-soft);
+}
+.chat__composer textarea:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+
+/* ---------- buttons (crayon stickers) ---------- */
+.btn {
+  font-family: var(--font-display);
+  border: 2.5px solid var(--ink);
+  border-radius: 14px 12px 15px 11px;
+  padding: 9px 20px;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow-sticker);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  align-self: flex-end;
+}
+.btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 rgba(74, 71, 84, 0.18);
+}
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(74, 71, 84, 0.18);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn--send {
+  background: var(--sky);
+  color: #fff;
+}
+.btn--stop {
+  background: var(--coral);
+  color: #fff;
+}
+.btn--ghost {
+  padding: 7px 15px;
+  font-size: 13px;
+  border-width: 2px;
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
+}
+.btn--ghost:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+
+/* ---------- dag toolbar ---------- */
+.dag-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 2.5px dashed var(--line-strong);
+  background: var(--paper);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.legend {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+.legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.legend__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 40% 55% 48% 52%;
+  border: 1.5px solid rgba(74, 71, 84, 0.25);
+}
+.dag-toolbar__meta {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+/* ---------- dag canvas ---------- */
+.dag-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--paper-2);
+}
+.react-flow {
+  background: transparent;
+}
+.dag-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+.dag-empty__doodle {
+  font-size: 46px;
+  transform: rotate(-8deg);
+  opacity: 0.8;
+}
+.dag-empty__title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  color: var(--ink);
+}
+.dag-empty__hint {
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+/* ---------- task node (crayon sticky) ---------- */
+.task-node {
+  position: relative;
+  width: 210px;
+  min-height: 72px;
+  padding: 12px 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  background: var(--wash, var(--paper));
+  border-radius: 16px 13px 17px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.12s ease;
+}
+.task-node:hover {
+  transform: translateY(-2px) rotate(-0.4deg);
+}
+/* the hand-drawn wobbly border lives on ::before so text stays crisp */
+.task-node::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 3px solid var(--crayon, var(--ink-soft));
+  filter: url(#crayon);
+  pointer-events: none;
+}
+.task-node--selected {
+  transform: translateY(-2px) rotate(-0.4deg);
+}
+.task-node--selected::before {
+  border-width: 3.5px;
+}
+.task-node--selected::after {
+  content: "📌";
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  font-size: 18px;
+  transform: rotate(12deg);
+}
+.task-node__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.35;
+  letter-spacing: 0.3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.task-node__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.task-node__status .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 45% 55% 50% 50%;
+}
+.dot {
+  display: inline-block;
+}
+
+/* react-flow handles: quiet little anchor dots */
+.react-flow__handle {
+  width: 7px;
+  height: 7px;
+  background: var(--paper);
+  border: 1.5px solid var(--line-strong);
+}
+/* hand-drawn crayon edges */
+.react-flow__edge-path {
+  stroke: #b7b0a0;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  filter: url(#crayon-edge);
+}
+.react-flow__arrowhead {
+  fill: #b7b0a0;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--sky);
+}
+
+/* ---------- gates (a pinned note) ---------- */
+.gates {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+  z-index: 6;
+  pointer-events: none;
+}
+.gate {
+  pointer-events: auto;
+  position: relative;
+  width: fit-content;
+  min-width: 300px;
+  max-width: 440px;
+  background: #f7f1fc;
+  border: 2px solid var(--lilac);
+  border-radius: 16px 13px 16px 12px;
+  padding: 14px 16px 14px;
+  box-shadow: var(--shadow-sticker);
+  transform: rotate(-0.6deg);
+}
+.gate::before {
+  content: "📍";
+  position: absolute;
+  top: -13px;
+  left: 16px;
+  font-size: 20px;
+  transform: rotate(-10deg);
+}
+.gate__badge {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: #7b5cb8;
+  letter-spacing: 0.5px;
+  margin-bottom: 7px;
+}
+.gate__question {
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.gate__actions {
+  display: flex;
+  gap: 10px;
+}
+.btn--gate {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+.btn--ok {
+  background: var(--meadow);
+  color: #fff;
+  border-color: #4f9e5d;
+}
+.btn--danger {
+  background: var(--coral);
+  color: #fff;
+  border-color: #c23b2e;
+}
+
+/* ---------- detail panel (a taped index card) ---------- */
+.detail {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 326px;
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 18px 15px 18px 14px;
+  padding: 18px;
+  z-index: 5;
+  box-shadow: var(--shadow-soft);
+}
+.detail::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  width: 66px;
+  height: 22px;
+  transform: translateX(-50%) rotate(-2deg);
+  background: rgba(240, 185, 78, 0.35);
+  border: 1px dashed rgba(179, 127, 22, 0.4);
+  border-radius: 3px;
+}
+.detail__close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 15px;
+}
+.detail__close:hover {
+  color: var(--ink);
+}
+.detail__status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+}
+.detail__status .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 45% 55% 50% 50%;
+}
+.detail__title {
+  font-family: var(--font-display);
+  margin: 9px 0 16px;
+  font-size: 17px;
+  color: var(--ink);
+  letter-spacing: 0.3px;
+}
+.detail__field {
+  margin-bottom: 14px;
+}
+.detail__field--row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.detail__key {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+  color: var(--ink-soft);
+  margin-bottom: 5px;
+}
+.detail__field code {
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--sky-ink);
+  word-break: break-all;
+}
+.detail__spec {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+.detail__result {
+  margin: 0;
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--paper-2);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 9px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+  color: var(--ink);
+}
+
+/* ---------- react-flow chrome ---------- */
+.react-flow__controls {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  border: 2px solid var(--line-strong);
+}
+.react-flow__controls button {
+  background: var(--paper);
+  border-bottom: 1.5px solid var(--line);
+  fill: var(--ink);
+  color: var(--ink);
+}
+.react-flow__controls button:hover {
+  background: var(--paper-2);
+}
+.react-flow__minimap {
+  border-radius: 12px;
+  border: 2px solid var(--line-strong);
+  box-shadow: var(--shadow-soft);
+}
+.react-flow__attribution {
+  display: none;
+}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle {
+  display: inline-flex;
+  border: 2px solid var(--line-strong);
+  border-radius: 12px 10px 12px 10px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.theme-toggle button {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  letter-spacing: 0.3px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.theme-toggle button + button {
+  border-left: 2px solid var(--line-strong);
+}
+.theme-toggle button.active {
+  background: var(--sky-wash);
+  color: var(--ink);
+}
+
+/* ============================================================
+   Motion — deliberate moments: things enter, Claude thinks,
+   text streams under a live caret, nodes pop onto the paper.
+   ============================================================ */
+.msg {
+  animation: msg-in 0.34s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+.tool-chip {
+  animation: tool-in 0.3s ease backwards;
+}
+/* `backwards` (not `forwards`) so the held end-state doesn't override the
+   node's :hover lift once the entrance finishes. Plays once per node — React
+   Flow reuses the DOM node across status polls, so it won't replay. */
+.task-node {
+  animation: node-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes tool-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px) rotate(-1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotate(0);
+  }
+}
+@keyframes node-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* "Claude is thinking" — three bouncing crayon dots */
+.msg__text--thinking {
+  width: fit-content;
+  padding: 13px 16px;
+}
+.thinking-dots {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.thinking-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sky);
+  animation: think-bounce 1.1s ease-in-out infinite;
+}
+.thinking-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.thinking-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes think-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* live caret trailing the streaming text */
+.caret {
+  display: inline-block;
+  width: 3px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--ink);
+  border-radius: 1.5px;
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------- a11y quality floor ---------- */
+:focus-visible {
+  outline: 3px solid var(--sky);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   DOODLE theme — ink-forward notebook sketch (Excalidraw-ish).
+   Keeps the soft status wash fills, but swaps to black pen
+   outlines, a rougher wobble, grid paper, and a handwriting face.
+   ============================================================ */
+:root[data-theme="doodle"] {
+  --paper: #fbfbf7;
+  --paper-2: #f4f5ef;
+  --paper-3: #ecece4;
+  --ink: #2c2a30;
+  --ink-soft: #6c6a73;
+  --line: #e0e0d6;
+  --line-strong: #cbcabf;
+  --shadow-sticker: 3px 3px 0 rgba(44, 42, 48, 0.16);
+  --shadow-soft: 0 6px 16px rgba(44, 42, 48, 0.08);
+  --font-display: "Kalam", "ZCOOL QingKe HuangYou", "PingFang SC", "Microsoft YaHei", cursive;
+  /* Latin -> Kalam; every CJK glyph -> ZCOOL QingKe HuangYou (marker) so the
+     whole doodle UI reads hand-drawn, not just the headings. */
+  --font-body: "Kalam", "ZCOOL QingKe HuangYou", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* every task box is drawn in pen */
+[data-theme="doodle"] .task-node::before {
+  border-color: var(--ink);
+  border-width: 2.2px;
+  filter: url(#doodle);
+}
+[data-theme="doodle"] .task-node__title {
+  font-weight: 700;
+}
+[data-theme="doodle"] .task-node__status .dot,
+[data-theme="doodle"] .legend__dot {
+  border: 1.5px solid var(--ink);
+}
+[data-theme="doodle"] .react-flow__edge-path {
+  stroke: var(--ink);
+  stroke-width: 1.7;
+  filter: url(#doodle-edge);
+}
+[data-theme="doodle"] .react-flow__handle {
+  border-color: var(--ink);
+}
+
+/* dashed paper folds become solid ink hairlines */
+[data-theme="doodle"] .topbar {
+  border-bottom: 2px solid var(--ink);
+}
+[data-theme="doodle"] .pane--chat {
+  border-right: 2px solid var(--ink);
+}
+[data-theme="doodle"] .dag-toolbar {
+  border-bottom: 2px solid var(--ink);
+}
+[data-theme="doodle"] .chat__composer {
+  border-top: 2px solid var(--ink);
+}
+[data-theme="doodle"] .chat__composer textarea {
+  border-color: var(--ink);
+}
+
+/* ink-outlined chrome */
+[data-theme="doodle"] .btn--send {
+  background: #cfe8f7;
+  color: var(--ink);
+}
+[data-theme="doodle"] .btn--stop {
+  background: #f8d2cc;
+  color: var(--ink);
+}
+[data-theme="doodle"] .chat__examples button,
+[data-theme="doodle"] .tool-chip,
+[data-theme="doodle"] .detail,
+[data-theme="doodle"] .conn {
+  border-color: var(--ink);
+}
+[data-theme="doodle"] .msg--assistant .msg__text {
+  border: 1.8px solid var(--ink);
+}
+[data-theme="doodle"] .msg--user .msg__text {
+  border: 1.8px solid var(--ink);
+}
+[data-theme="doodle"] .gate {
+  border: 2px solid var(--ink);
+}
+[data-theme="doodle"] .theme-toggle,
+[data-theme="doodle"] .theme-toggle button + button {
+  border-color: var(--ink);
+}
+[data-theme="doodle"] .theme-toggle button.active {
+  background: var(--paper-3);
+}

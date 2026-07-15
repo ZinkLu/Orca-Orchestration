@@ -1,0 +1,22 @@
+{
+  "name": "orca-orchestration-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chat with Claude to plan work; watch the orchestration task DAG build and update live.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "build:binary": "node scripts/build-binary.mjs",
+    "start": "npm run start -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
