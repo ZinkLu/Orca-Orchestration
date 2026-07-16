@@ -102,7 +102,7 @@ export default function App() {
           <span className="topbar__logo">🐳</span>
           <div>
             <div className="topbar__title">Orca DAG Viewer</div>
-            <div className="topbar__subtitle">和 agent 聊天建图 · 加 worker，让 Orca 自动执行</div>
+            <div className="topbar__subtitle">和 agent 聊天建图 · 选 harness，让 Orca 按依赖并行执行</div>
           </div>
         </div>
         <div className="topbar__right">
@@ -143,7 +143,7 @@ export default function App() {
               <span className="dag-toolbar__meta">
                 {dag.nodes.length} 个任务 · {dag.edges.length} 条依赖
               </span>
-              <ExecControls hasTasks={dag.nodes.length > 0} />
+              <ExecControls taskIds={dag.nodes.map((n) => n.id)} />
             </div>
           </div>
 

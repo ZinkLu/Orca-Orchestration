@@ -71,11 +71,11 @@ DAG 有了雏形就让用户打开 viewer：
 ```bash
 orca-dag        # 在当前项目目录运行；起在 http://localhost:8787 并自动开浏览器
 ```
-viewer 里用户的操作是：**实时看 DAG** → **加几个 worker（选 harness：kimi / claude / opencode / grok …）** → 点 **「▶ 让 Orca 执行」** → **Orca 的 coordinator 自动按依赖把 ready 任务派给空闲 worker、等 `worker_done`、推进整张图** → **处理审批门**。
+viewer 里用户的操作是：**实时看 DAG** → **给每个节点选 harness**（claude / kimi / opencode / grok …，或用默认兜底）→ 点 **「▶ 让 Orca 执行」** → **viewer 内置的 coordinator 按依赖把 ready 任务并行派给按需拉起的自主 worker、等 `worker_done`、推进整张图** → **处理审批门**。
 
-也就是说：**执行由 Orca 的 coordinator（`orca orchestration run`）接管，不是你手动派发。** 你的职责到"把 DAG 建对"为止。
+也就是说：**执行由 viewer 接管,不是你手动派发。** 你的职责到"把 DAG 建对"为止。
 
-你和用户可以**一边在对话里继续调整 DAG**（增删任务、改依赖、加门），viewer 会实时反映。**默认不要自己去 `orca orchestration dispatch` / `run`**，那是 viewer 里的按钮在做，除非用户明确要求你在命令行里跑。
+你和用户可以**一边在对话里继续调整 DAG**（增删任务、改依赖、加门），viewer 会实时反映。**默认不要自己去 `orca orchestration dispatch` / `run`**，那是 viewer 在做，除非用户明确要求你在命令行里跑。
 
 ## 边界与已知约束
 - 聚焦**规划 + 建图**。执行交给 viewer（coordinator）。

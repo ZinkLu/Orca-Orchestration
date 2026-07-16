@@ -325,6 +325,12 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.task-node__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
 .task-node__status {
   display: flex;
   align-items: center;
@@ -336,6 +342,15 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 45% 55% 50% 50%;
+}
+.task-node__harness {
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 8px 6px 8px 6px;
+  padding: 1px 7px;
 }
 .dot {
   display: inline-block;
@@ -350,13 +365,13 @@ body {
 }
 /* hand-drawn crayon edges */
 .react-flow__edge-path {
-  stroke: #b7b0a0;
-  stroke-width: 2.4;
+  stroke: #8f8672;
+  stroke-width: 2.6;
   stroke-linecap: round;
   filter: url(#crayon-edge);
 }
 .react-flow__arrowhead {
-  fill: #b7b0a0;
+  fill: #8f8672;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--sky);
@@ -518,6 +533,27 @@ body {
   white-space: pre-wrap;
   color: var(--ink);
 }
+.node-panel__select,
+.node-panel__custom {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 11px;
+  border-radius: 11px 9px 12px 8px;
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
+  color: var(--ink);
+}
+.node-panel__custom {
+  margin-top: 8px;
+  font-family: "Fredoka", ui-monospace, monospace;
+}
+.node-panel__select:focus,
+.node-panel__custom:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
 .node-panel__field--row {
   flex-direction: row;
   justify-content: space-between;
@@ -541,21 +577,22 @@ body {
 .exec {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
 }
-.exec__workers {
+.exec__field {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 .exec__label {
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-soft);
 }
 .exec__select,
-.exec__custom {
+.exec__custom,
+.exec__num {
   font-family: var(--font-body);
   font-size: 12.5px;
   padding: 5px 9px;
@@ -565,13 +602,41 @@ body {
   color: var(--ink);
 }
 .exec__custom {
-  width: 110px;
+  width: 100px;
   font-family: "Fredoka", ui-monospace, monospace;
 }
+.exec__num {
+  width: 52px;
+}
 .exec__select:focus,
-.exec__custom:focus {
+.exec__custom:focus,
+.exec__num:focus {
   outline: none;
   border-color: var(--sky);
+}
+.exec__live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.exec__running {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  color: var(--butter);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.exec__pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--butter);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 .btn--run {
   background: var(--meadow);
@@ -754,6 +819,10 @@ body {
 /* ink-outlined chrome */
 [data-theme="doodle"] .exec__select,
 [data-theme="doodle"] .exec__custom,
+[data-theme="doodle"] .exec__num,
+[data-theme="doodle"] .node-panel__select,
+[data-theme="doodle"] .node-panel__custom,
+[data-theme="doodle"] .task-node__harness,
 [data-theme="doodle"] .node-panel,
 [data-theme="doodle"] .conn {
   border-color: var(--ink);

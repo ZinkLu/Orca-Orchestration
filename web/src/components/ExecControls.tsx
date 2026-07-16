@@ -1,68 +1,61 @@
-import { useCallback, useEffect, useState } from "react";
-import { createWorker, fetchHealth, fetchTerminals, startRun, stopRun } from "../api";
-import { HARNESSES } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchRunStatus, startRun, stopRun } from "../api";
+import { getDefaultHarness, harnessMap, setDefaultHarness } from "../harness";
+import { HARNESSES, type RunStatus } from "../types";
 
 const CUSTOM = "__custom__";
+const KNOWN = HARNESSES as readonly string[];
 
 /**
- * Execution controls: build a pool of worker agents (pick a harness), then Run
- * to hand the DAG to Orca's coordinator, which auto-dispatches ready tasks to
- * idle workers until the graph is done.
+ * Execution controls. The coordinator is DAG-driven: click Run and it dispatches
+ * every ready task in parallel (up to a concurrency cap), each on its own node's
+ * harness — no manual worker count. Here you only set the fallback harness for
+ * nodes without an explicit choice, and the parallelism cap.
  */
-export function ExecControls({ hasTasks }: { hasTasks: boolean }) {
-  const [harness, setHarness] = useState<string>(HARNESSES[0]);
-  const [custom, setCustom] = useState("");
-  const [workers, setWorkers] = useState<number>(0);
-  const [running, setRunning] = useState(false);
+export function ExecControls({ taskIds }: { taskIds: string[] }) {
+  const initial = getDefaultHarness();
+  const [defHarness, setDefHarness] = useState<string>(KNOWN.includes(initial) ? initial : CUSTOM);
+  const [custom, setCustom] = useState(KNOWN.includes(initial) ? "" : initial);
+  const [maxConcurrency, setMaxConcurrency] = useState(4);
+  const [status, setStatus] = useState<RunStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [workspace, setWorkspace] = useState<string>("");
+  const taskIdsRef = useRef(taskIds);
+  taskIdsRef.current = taskIds;
 
-  const refreshWorkers = useCallback(async (ws: string) => {
+  const poll = useCallback(async () => {
     try {
-      const terms = await fetchTerminals();
-      const dir = ws || workspace;
-      setWorkers(terms.filter((t) => t.worktreePath === dir && t.connected).length);
+      setStatus(await fetchRunStatus());
     } catch {
-      /* leave count as-is */
+      /* ignore transient */
     }
-  }, [workspace]);
-
-  useEffect(() => {
-    fetchHealth()
-      .then((h) => {
-        setWorkspace(h.workspace);
-        refreshWorkers(h.workspace);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resolved = harness === CUSTOM ? custom.trim() : harness;
+  useEffect(() => {
+    poll();
+    const t = window.setInterval(poll, 2000);
+    return () => window.clearInterval(t);
+  }, [poll]);
 
-  async function addWorker() {
-    if (!resolved) {
-      setErr("请选择或输入一个 harness");
-      return;
-    }
-    setBusy(true);
-    setErr(null);
-    try {
-      await createWorker(resolved);
-      await refreshWorkers(workspace);
-    } catch (e) {
-      setErr(String((e as Error).message ?? e));
-    } finally {
-      setBusy(false);
-    }
+  const running = status?.running ?? false;
+  const resolvedDefault = defHarness === CUSTOM ? custom.trim() : defHarness;
+
+  function pickDefault(h: string) {
+    setDefHarness(h);
+    if (h !== CUSTOM) setDefaultHarness(h);
   }
 
   async function run() {
+    if (!resolvedDefault) {
+      setErr("请选择默认 harness");
+      return;
+    }
+    if (defHarness === CUSTOM) setDefaultHarness(resolvedDefault);
     setBusy(true);
     setErr(null);
     try {
-      await startRun();
-      setRunning(true);
+      const s = await startRun(harnessMap(taskIdsRef.current), resolvedDefault, maxConcurrency);
+      setStatus(s);
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
@@ -75,7 +68,7 @@ export function ExecControls({ hasTasks }: { hasTasks: boolean }) {
     setErr(null);
     try {
       await stopRun();
-      setRunning(false);
+      await poll();
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
@@ -85,13 +78,13 @@ export function ExecControls({ hasTasks }: { hasTasks: boolean }) {
 
   return (
     <div className="exec">
-      <div className="exec__workers">
-        <span className="exec__label">Workers {workers > 0 ? `· ${workers}` : ""}</span>
+      <label className="exec__field">
+        <span className="exec__label">默认 harness</span>
         <select
           className="exec__select"
-          value={harness}
-          onChange={(e) => setHarness(e.target.value)}
-          aria-label="选择 worker 的 harness"
+          value={defHarness}
+          onChange={(e) => pickDefault(e.target.value)}
+          disabled={running}
         >
           {HARNESSES.map((h) => (
             <option key={h} value={h}>
@@ -100,30 +93,46 @@ export function ExecControls({ hasTasks }: { hasTasks: boolean }) {
           ))}
           <option value={CUSTOM}>自定义…</option>
         </select>
-        {harness === CUSTOM && (
+        {defHarness === CUSTOM && (
           <input
             className="exec__custom"
             value={custom}
-            placeholder="命令，如 aider"
+            placeholder="命令"
             onChange={(e) => setCustom(e.target.value)}
+            disabled={running}
           />
         )}
-        <button className="btn btn--ghost" onClick={addWorker} disabled={busy}>
-          + 加 worker
-        </button>
-      </div>
+      </label>
+
+      <label className="exec__field">
+        <span className="exec__label">最多并行</span>
+        <input
+          className="exec__num"
+          type="number"
+          min={1}
+          max={16}
+          value={maxConcurrency}
+          onChange={(e) => setMaxConcurrency(Math.max(1, Math.min(16, Number(e.target.value) || 1)))}
+          disabled={running}
+        />
+      </label>
 
       {running ? (
-        <button className="btn btn--stop-run" onClick={stop} disabled={busy}>
-          ⏹ 停止执行
-        </button>
+        <div className="exec__live">
+          <button className="btn btn--stop-run" onClick={stop} disabled={busy}>
+            ⏹ 停止
+          </button>
+          <span className="exec__running">
+            <span className="exec__pulse" /> 执行中 · {status?.busy ?? 0} worker
+          </span>
+        </div>
       ) : (
-        <button className="btn btn--run" onClick={run} disabled={busy || !hasTasks}>
+        <button className="btn btn--run" onClick={run} disabled={busy || taskIds.length === 0}>
           ▶ 让 Orca 执行
         </button>
       )}
 
-      {err && <span className="exec__err">⚠️ {err}</span>}
+      {(err || status?.error) && <span className="exec__err">⚠️ {err || status?.error}</span>}
     </div>
   );
 }

@@ -15,12 +15,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { layoutDag } from "../layout";
+import { effectiveHarness } from "../harness";
 import { STATUS_META, type DagResponse, type TaskStatus, type Theme } from "../types";
 
 type TaskNodeData = {
   label: string;
   status: TaskStatus;
   selected: boolean;
+  harness: string;
 };
 
 function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
@@ -37,9 +39,14 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
     >
       <Handle type="target" position={Position.Left} />
       <div className="task-node__title">{data.label}</div>
-      <div className="task-node__status" style={{ color: meta.ink }}>
-        <span className="dot" style={{ background: meta.color }} />
-        {meta.label}
+      <div className="task-node__row">
+        <div className="task-node__status" style={{ color: meta.ink }}>
+          <span className="dot" style={{ background: meta.color }} />
+          {meta.label}
+        </div>
+        <span className="task-node__harness" title="这个节点的 harness">
+          {data.harness}
+        </span>
       </div>
       <Handle type="source" position={Position.Right} />
     </div>
@@ -68,7 +75,12 @@ function Flow({
       id: n.id,
       type: "task",
       position: { x: 0, y: 0 },
-      data: { label: n.label, status: n.status, selected: n.id === selectedId },
+      data: {
+        label: n.label,
+        status: n.status,
+        selected: n.id === selectedId,
+        harness: effectiveHarness(n.id),
+      },
     }));
     const rawEdges: Edge[] = dag.edges.map((e) => ({
       id: e.id,

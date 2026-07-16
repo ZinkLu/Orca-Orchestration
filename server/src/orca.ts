@@ -161,63 +161,79 @@ export async function listTerminals(): Promise<OrcaTerminal[]> {
   }));
 }
 
-export interface WorkerResult {
-  handle: string;
-  worktreeId: string;
+/**
+ * How to launch each harness as an AUTONOMOUS worker — i.e. able to run the
+ * `orca orchestration send --type worker_done …` completion command without a
+ * human clicking "approve". A plain interactive agent would stall on the
+ * permission prompt and never report done.
+ *
+ * `claude --dangerously-skip-permissions` is verified. The others are the bare
+ * command as a placeholder — each agent's own approval-off flag must be filled
+ * in and verified before it works hands-off (see README).
+ */
+export const HARNESS_LAUNCH: Record<string, string> = {
+  claude: "claude --dangerously-skip-permissions",
+  codex: "codex", // TODO: verify autonomous flag
+  opencode: "opencode", // TODO: verify autonomous flag
+  kimi: "kimi", // TODO: verify autonomous flag
+  grok: "grok", // TODO: verify autonomous flag
+};
+
+/** The launch command for a harness (autonomous variant if known). */
+export function harnessCommand(harness: string): string {
+  return HARNESS_LAUNCH[harness] ?? harness;
 }
 
 /**
- * Spawn a worker agent terminal running `harness` in a worktree.
- *
- * The coordinator (`orca orchestration run`) does NOT spawn workers itself — it
- * dispatches ready tasks to idle worker terminals that already exist. So the
- * viewer builds that pool: a "harness" is just the command launched in the
- * terminal (claude / kimi / opencode / grok / codex …), which is where the
- * choice of agent lives.
+ * Spawn an autonomous worker agent terminal for `harness` and wait for its TUI
+ * to be ready. Returns the terminal handle. Requires the cwd to be an
+ * Orca-managed worktree.
  */
-export async function createWorker(harness: string, worktree = "active"): Promise<WorkerResult> {
-  const created = await runOrca<{ terminal?: { handle?: string; worktreeId?: string } }>([
+export async function spawnWorker(harness: string, worktree = "active"): Promise<string> {
+  const created = await runOrca<{ terminal?: { handle?: string } }>([
     "terminal",
     "create",
     "--worktree",
     worktree,
     "--command",
-    harness,
+    harnessCommand(harness),
   ]);
   const handle = created.terminal?.handle;
   if (!handle) throw new Error("orca terminal create 未返回 handle");
-  return { handle, worktreeId: created.terminal?.worktreeId ?? "" };
-}
-
-export interface RunResult {
-  runId: string;
-  status: string;
-}
-
-/**
- * Start the coordinator loop. Orca then auto-executes the DAG: it dispatches
- * ready tasks across idle workers, respects dependencies, and advances as
- * workers report `worker_done` — until the graph is done. Returns immediately
- * with a runId (the loop lives inside the Orca runtime).
- */
-export async function startRun(spec: string, worktree = "active"): Promise<RunResult> {
-  const r = await runOrca<{ runId?: string; status?: string }>([
-    "orchestration",
-    "run",
-    "--spec",
-    spec,
-    "--worktree",
-    worktree,
-  ]);
-  return { runId: r.runId ?? "", status: r.status ?? "running" };
-}
-
-/** Stop the active coordinator run. No-op when none is running. */
-export async function stopRun(): Promise<void> {
+  // Best-effort: wait for the agent to boot before it can receive a dispatch.
   try {
-    await runOrca(["orchestration", "run-stop"]);
-  } catch (e) {
-    if (!String(e).includes("No active coordinator run")) throw e;
+    await runOrca(["terminal", "wait", "--terminal", handle, "--for", "tui-idle", "--timeout-ms", "45000"]);
+  } catch {
+    // some harnesses never report tui-idle; the coordinator will still try
+  }
+  return handle;
+}
+
+/** Dispatch a task to a worker terminal (injects the coordinator preamble). */
+export async function dispatchTask(taskId: string, handle: string): Promise<void> {
+  await runOrca(["orchestration", "dispatch", "--task", taskId, "--to", handle, "--inject"]);
+  // `--inject` types the preamble into the agent's TUI but doesn't reliably
+  // submit it — the text can sit unsent in the input box (a readiness race).
+  // Settle briefly, then press Enter so the worker actually starts. A stray
+  // Enter on an already-submitted/empty input is a harmless no-op.
+  await sleep(2000);
+  try {
+    await runOrca(["terminal", "send", "--terminal", handle, "--enter"]);
+  } catch {
+    // best-effort nudge
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Close a terminal (used to tear down workers when a run ends). */
+export async function closeTerminal(handle: string): Promise<void> {
+  try {
+    await runOrca(["terminal", "close", "--terminal", handle]);
+  } catch {
+    // terminal may already be gone
   }
 }
 

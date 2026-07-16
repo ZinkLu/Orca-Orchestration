@@ -4,16 +4,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join } from "node:path";
-import {
-  createWorker,
-  listGates,
-  listTasks,
-  listTerminals,
-  runOrca,
-  startRun,
-  stopRun,
-  tasksToDag,
-} from "./orca";
+import { listGates, listTasks, listTerminals, runOrca, tasksToDag } from "./orca";
+import { coordinatorStatus, startCoordinator, stopCoordinator } from "./coordinator";
 import { loadEmbeddedAssets } from "./webAssets";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,12 +17,6 @@ app.use(express.json({ limit: "2mb" }));
 const PORT = Number(process.env.PORT ?? 8787);
 // Directory used to resolve the `active` worktree for workers / the coordinator.
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR ?? process.cwd();
-
-// Default instructions handed to the coordinator loop. Users rarely need to
-// change this — it just tells Orca to run the existing DAG topologically.
-const DEFAULT_RUN_SPEC =
-  "Execute the current orchestration task DAG: dispatch each ready task to an idle worker, " +
-  "respect dependencies, wait for each worker_done, advance the graph, and summarize blockers.";
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, workspace: WORKSPACE_DIR });
@@ -56,41 +42,32 @@ app.get("/api/terminals", async (_req, res) => {
   }
 });
 
-/** Spawn a worker agent terminal running a harness. Body: { harness, worktree? }. */
-app.post("/api/worker", async (req, res) => {
-  const harness = String(req.body?.harness ?? "").trim();
-  const worktree = req.body?.worktree ? String(req.body.worktree).trim() : undefined;
-  if (!harness) {
-    res.status(400).json({ error: "harness required" });
-    return;
-  }
-  try {
-    const result = await createWorker(harness, worktree);
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ error: String((err as Error).message ?? err) });
-  }
+/**
+ * Start the self-driven coordinator. It dispatches ready tasks in parallel to
+ * per-task harness workers until the DAG is done.
+ * Body: { harnessByTask?: {taskId:harness}, defaultHarness?, maxConcurrency? }.
+ */
+app.post("/api/run", (req, res) => {
+  const harnessByTask = (req.body?.harnessByTask ?? {}) as Record<string, string>;
+  const defaultHarness = String(req.body?.defaultHarness ?? "claude").trim() || "claude";
+  const maxConcurrency = Math.max(1, Math.min(16, Number(req.body?.maxConcurrency) || 4));
+  startCoordinator({ harnessByTask, defaultHarness, maxConcurrency });
+  res.json({ ok: true, ...coordinatorStatus() });
 });
 
-/** Start the coordinator loop so Orca auto-executes the DAG. Body: { spec? }. */
-app.post("/api/run", async (req, res) => {
-  const spec = String(req.body?.spec ?? "").trim() || DEFAULT_RUN_SPEC;
-  try {
-    const result = await startRun(spec);
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ error: String((err as Error).message ?? err) });
-  }
-});
-
-/** Stop the active coordinator run. */
+/** Stop the coordinator and tear down spawned workers. */
 app.post("/api/run-stop", async (_req, res) => {
   try {
-    await stopRun();
+    await stopCoordinator(true);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: String((err as Error).message ?? err) });
   }
+});
+
+/** Live coordinator status (running, active workers, per-worker task). */
+app.get("/api/run-status", (_req, res) => {
+  res.json(coordinatorStatus());
 });
 
 /** Resolve a decision gate (human approval). */

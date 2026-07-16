@@ -62,21 +62,26 @@ export const STATUS_META: Record<TaskStatus, StatusMeta> = {
   blocked: { label: "阻塞", color: "#B79FE0", bg: "#F2EDFB", ink: "#7B5CB8" },
 };
 
-/** A live Orca terminal (running agent/shell) a task can be dispatched to. */
-export interface Terminal {
-  handle: string;
-  worktreePath: string;
-  worktreeId: string;
-  branch: string;
-  title: string;
-  connected: boolean;
-  writable: boolean;
-}
-
 /**
- * Harness presets shown in the node action panel. A harness is just the command
- * launched in a fresh terminal — so this list is pure viewer config, not an Orca
- * enum, and users can also type a custom command.
+ * Harness presets. A harness is just the agent command launched in a worker
+ * terminal — so this list is pure viewer config, not an Orca enum. Each task
+ * node picks its own; unset nodes fall back to the global default.
  */
 export const HARNESSES = ["claude", "kimi", "opencode", "grok", "codex"] as const;
 export type Harness = (typeof HARNESSES)[number] | (string & {});
+
+/** A worker the coordinator is using, and the task it's currently running. */
+export interface RunWorker {
+  handle: string;
+  harness: string;
+  taskId: string | null;
+}
+
+/** Live status of the self-driven coordinator. */
+export interface RunStatus {
+  running: boolean;
+  busy: number;
+  error: string | null;
+  startedAt: number;
+  workers: RunWorker[];
+}
