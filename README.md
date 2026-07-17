@@ -74,6 +74,8 @@ orca-dag                             # 起在 http://localhost:8787，自动开�
 ## viewer 能做什么
 
 - **实时可视化** DAG，节点状态 `pending / ready / dispatched / completed / failed / blocked` 映射颜色；每个节点角上标着它的 harness。
+- **拖拽布局**：节点可自由拖动，位置在实时轮询刷新中保持不变（只有你没动过的节点跟随自动布局）。
+- **执行动画**：`dispatched`（执行中）节点用蜡笔斜纹自下而上一遍遍「涂满」；从执行中节点流出的连线用铅笔「描绘」特效，从本节点向下游节点渐显。
 - **每节点选 harness**：点节点在面板里选 `claude / kimi / opencode / grok / codex` 或自定义命令（存 localStorage）；没单独设的节点用顶栏的**默认 harness** 兜底。
 - **▶ 让 Orca 执行 / ⏹ 停止** + **最多并行**：启动/停止 viewer 内置的自驱动 coordinator；worker 数由 DAG 并行度决定(能并行就并行,受"最多并行"上限约束)、按需拉起、空闲复用、跑完回收 —— **不用手动加 worker**。执行中显示"N worker"。
 - **审批门**：agent `gate-create` 后，DAG 上浮出「批准 / 驳回」。

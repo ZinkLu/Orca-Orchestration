@@ -10,8 +10,10 @@ const EMPTY: DagResponse = { nodes: [], edges: [], gates: [], generatedAt: 0 };
 const POLL_MS = 2000;
 
 /**
- * Hand-drawn wobble filters (crayon): a gentle waxy waver applied to node
- * outlines and edges via SVG displacement. Referenced by CSS `filter: url(#…)`.
+ * Hand-drawn wobble filter (crayon): a gentle waxy waver applied to node
+ * outlines and the in-progress crayon fill via SVG displacement. Referenced by
+ * CSS `filter: url(#crayon)`. (Edges deliberately skip it — a straight edge's
+ * zero-height bbox collapses an objectBoundingBox filter region to nothing.)
  */
 function HandDrawnDefs() {
   return (
@@ -20,10 +22,6 @@ function HandDrawnDefs() {
         <filter id="crayon" x="-10%" y="-10%" width="120%" height="120%">
           <feTurbulence type="fractalNoise" baseFrequency="0.009" numOctaves="2" seed="7" result="n" />
           <feDisplacementMap in="SourceGraphic" in2="n" scale="6.5" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        <filter id="crayon-edge" x="-30%" y="-30%" width="160%" height="160%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="2" seed="3" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="7.5" xChannelSelector="R" yChannelSelector="G" />
         </filter>
       </defs>
     </svg>

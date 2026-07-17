@@ -9,11 +9,11 @@ export const NODE_H = 72;
  * Deterministic layout means live status polls recolor nodes in place
  * without the graph jumping around.
  */
-export function layoutDag(
-  nodes: Node[],
+export function layoutDag<N extends Node>(
+  nodes: N[],
   edges: Edge[],
   direction: "LR" | "TB" = "LR",
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: N[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: direction, nodesep: 36, ranksep: 90, marginx: 20, marginy: 20 });
   g.setDefaultEdgeLabel(() => ({}));
@@ -31,7 +31,7 @@ export function layoutDag(
       sourcePosition: direction === "LR" ? Position.Right : Position.Bottom,
       targetPosition: direction === "LR" ? Position.Left : Position.Top,
     };
-  });
+  }) as N[];
 
   return { nodes: positioned, edges };
 }

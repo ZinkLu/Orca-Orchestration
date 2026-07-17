@@ -356,6 +356,50 @@ body {
   display: inline-block;
 }
 
+/* ---------- in-progress: crayon colours the box in ----------
+   A diagonal crayon hatch that fills the node from the bottom up, over and
+   over, while the task is `dispatched` (running). Sits behind the text. */
+.task-node__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    48deg,
+    color-mix(in srgb, var(--crayon, #d98a3d) 62%, transparent) 0 2.6px,
+    transparent 2.6px 6.5px
+  );
+  filter: url(#crayon);
+}
+.task-node__title,
+.task-node__row {
+  position: relative;
+  z-index: 1;
+}
+.task-node[data-status="dispatched"] .task-node__fill {
+  animation: crayon-fill 1.7s ease-in-out infinite;
+}
+@keyframes crayon-fill {
+  0% {
+    opacity: 0;
+    clip-path: inset(100% 0 0 0);
+  }
+  18% {
+    opacity: 0.85;
+  }
+  62%,
+  82% {
+    opacity: 0.85;
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 /* react-flow handles: quiet little anchor dots */
 .react-flow__handle {
   width: 7px;
@@ -363,18 +407,45 @@ body {
   background: var(--paper);
   border: 1.5px solid var(--line-strong);
 }
-/* hand-drawn crayon edges */
+/* pencil edges — a thin round-capped stroke. No displacement filter: a
+   perfectly horizontal edge (the common LR case) has a zero-height bounding
+   box, and an objectBoundingBox filter region collapses to nothing there,
+   which would make the edge invisible. */
 .react-flow__edge-path {
   stroke: #8f8672;
   stroke-width: 2.6;
   stroke-linecap: round;
-  filter: url(#crayon-edge);
 }
 .react-flow__arrowhead {
   fill: #8f8672;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--sky);
+}
+/* execution: pencil-draws the link out of the running node toward the next,
+   fading in from transparent then wiping the stroke on from source to target.
+   dasharray is larger than any realistic edge so offset maps to "how much of
+   the line is drawn yet". */
+.react-flow__edge.edge-active .react-flow__edge-path {
+  stroke-dasharray: 1200;
+  animation: pencil-draw 1.5s ease-in-out infinite;
+}
+@keyframes pencil-draw {
+  0% {
+    stroke-dashoffset: 1200;
+    opacity: 0.12;
+  }
+  22% {
+    opacity: 0.95;
+  }
+  75% {
+    stroke-dashoffset: 0;
+    opacity: 0.95;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
 }
 
 /* ---------- gates (a pinned note) ---------- */

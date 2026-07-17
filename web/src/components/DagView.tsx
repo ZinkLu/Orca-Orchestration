@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -8,6 +8,8 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
   type Edge,
   type Node,
@@ -17,6 +19,8 @@ import "@xyflow/react/dist/style.css";
 import { layoutDag } from "../layout";
 import { effectiveHarness } from "../harness";
 import { STATUS_META, type DagResponse, type TaskStatus } from "../types";
+
+const ARROW_COLOR = "#8f8672";
 
 type TaskNodeData = {
   label: string;
@@ -30,6 +34,7 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
   return (
     <div
       className={`task-node${data.selected ? " task-node--selected" : ""}`}
+      data-status={data.status}
       style={
         {
           "--crayon": meta.color,
@@ -37,6 +42,8 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
         } as CSSProperties
       }
     >
+      {/* crayon "colouring-in" overlay — only animates while dispatched */}
+      <div className="task-node__fill" aria-hidden="true" />
       <Handle type="target" position={Position.Left} />
       <div className="task-node__title">{data.label}</div>
       <div className="task-node__row">
@@ -66,9 +73,18 @@ function Flow({
 }) {
   const rf = useReactFlow();
   const prevCount = useRef(-1);
-  const arrowColor = "#8f8672";
+  // positions the user has explicitly dragged — preserved across status polls
+  const dragged = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // id of the node under an active drag gesture (keep its live position)
+  const draggingId = useRef<string | null>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<TaskNodeData>>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  const { nodes, edges } = useMemo(() => {
+  // Re-derive nodes/edges from the DAG (dagre layout) whenever it or the
+  // selection changes. User-dragged nodes keep their position; everything else
+  // follows the deterministic layout.
+  useEffect(() => {
+    const statusById = new Map(dag.nodes.map((n) => [n.id, n.status]));
     const rawNodes: Node<TaskNodeData>[] = dag.nodes.map((n) => ({
       id: n.id,
       type: "task",
@@ -84,13 +100,26 @@ function Flow({
       id: e.id,
       source: e.source,
       target: e.target,
-      markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: arrowColor },
+      // pencil-draw the link out of a node that is currently running
+      className: statusById.get(e.source) === "dispatched" ? "edge-active" : undefined,
+      markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: ARROW_COLOR },
     }));
-    return layoutDag(rawNodes, rawEdges, "LR");
-  }, [dag, selectedId, arrowColor]);
+    const laid = layoutDag(rawNodes, rawEdges, "LR");
+
+    setNodes((cur) => {
+      const curPos = new Map(cur.map((n) => [n.id, n.position]));
+      return laid.nodes.map((n) => {
+        const keep =
+          dragged.current.get(n.id) ??
+          (draggingId.current === n.id ? curPos.get(n.id) : undefined);
+        return keep ? { ...n, position: keep } : n;
+      });
+    });
+    setEdges(laid.edges);
+  }, [dag, selectedId, setNodes, setEdges]);
 
   // Auto-fit only when the node count changes, so live status polls don't
-  // yank the viewport around while the user is inspecting the graph.
+  // yank the viewport around while the user is inspecting (or dragging).
   useEffect(() => {
     if (nodes.length !== prevCount.current) {
       prevCount.current = nodes.length;
@@ -98,6 +127,14 @@ function Flow({
       return () => window.clearTimeout(t);
     }
   }, [nodes.length, rf]);
+
+  const onNodeDragStart = useCallback((_e: unknown, node: Node) => {
+    draggingId.current = node.id;
+  }, []);
+  const onNodeDragStop = useCallback((_e: unknown, node: Node) => {
+    dragged.current.set(node.id, node.position);
+    draggingId.current = null;
+  }, []);
 
   if (dag.nodes.length === 0) {
     return (
@@ -117,9 +154,13 @@ function Flow({
     <ReactFlow
       nodes={nodes}
       edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onNodeDragStart={onNodeDragStart}
+      onNodeDragStop={onNodeDragStop}
       nodeTypes={nodeTypes}
       fitView
-      nodesDraggable={false}
+      nodesDraggable
       nodesConnectable={false}
       elementsSelectable
       minZoom={0.2}
