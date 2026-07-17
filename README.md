@@ -74,6 +74,7 @@ orca-dag                             # 起在 http://localhost:8787，自动开�
 ## viewer 能做什么
 
 - **实时可视化** DAG，节点状态 `pending / ready / dispatched / completed / failed / blocked` 映射颜色；每个节点角上标着它的 harness。
+- **布局算法切换**：顶栏「布局」段控可切 **横向分层 / 纵向分层**（dagre / Sugiyama）与 **力导向**（Fruchterman–Reingold）；**↻ 重排** 一键重新自动布局（清除手动拖拽）。选择记忆到 localStorage。
 - **拖拽布局**：节点可自由拖动，位置在实时轮询刷新中保持不变（只有你没动过的节点跟随自动布局）。
 - **执行动画**：`dispatched`（执行中）节点用蜡笔斜纹自下而上一遍遍「涂满」；从执行中节点流出的连线用铅笔「描绘」特效，从本节点向下游节点渐显。
 - **每节点选 harness**：点节点在面板里选 `claude / kimi / opencode / grok / codex` 或自定义命令（存 localStorage）；没单独设的节点用顶栏的**默认 harness** 兜底。
@@ -110,7 +111,8 @@ web/src/
   components/NodePanel.tsx    节点详情 + 每节点 harness 选择
   components/GatePanel.tsx    审批门浮层
   harness.ts                每节点 harness / 默认 harness（localStorage）
-  layout.ts / types.ts / api.ts
+  layout.ts                 布局算法：dagre 分层（LR/TB）+ 力导向（Fruchterman–Reingold）
+  types.ts / api.ts
 scripts/build-binary.mjs  vite build → 内嵌资源 → bun --compile → dist/orca-dag
 ```
 

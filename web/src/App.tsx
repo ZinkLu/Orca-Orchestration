@@ -4,7 +4,7 @@ import { ExecControls } from "./components/ExecControls";
 import { GatePanel } from "./components/GatePanel";
 import { NodePanel } from "./components/NodePanel";
 import { fetchDag, resetTasks } from "./api";
-import { STATUS_META, type DagResponse, type TaskStatus } from "./types";
+import { LAYOUTS, STATUS_META, type DagResponse, type LayoutKind, type TaskStatus } from "./types";
 
 const EMPTY: DagResponse = { nodes: [], edges: [], gates: [], generatedAt: 0 };
 const POLL_MS = 2000;
@@ -32,7 +32,17 @@ export default function App() {
   const [dag, setDag] = useState<DagResponse>(EMPTY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connError, setConnError] = useState(false);
+  const [layout, setLayout] = useState<LayoutKind>(
+    () => (localStorage.getItem("orca-dag:layout") as LayoutKind) || "layered-lr",
+  );
+  // bump to force a fresh auto-layout (discarding manual drags)
+  const [reorgNonce, setReorgNonce] = useState(0);
   const timer = useRef<number | null>(null);
+
+  function pickLayout(kind: LayoutKind) {
+    setLayout(kind);
+    localStorage.setItem("orca-dag:layout", kind);
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -104,6 +114,29 @@ export default function App() {
               ))}
             </div>
             <div className="dag-toolbar__right">
+              <div className="layout-ctl">
+                <span className="exec__label">布局</span>
+                <div className="seg" role="group" aria-label="布局算法">
+                  {LAYOUTS.map((l) => (
+                    <button
+                      key={l.kind}
+                      className={layout === l.kind ? "active" : ""}
+                      aria-pressed={layout === l.kind}
+                      title={l.title}
+                      onClick={() => pickLayout(l.kind)}
+                    >
+                      <span aria-hidden="true">{l.icon}</span> {l.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="btn btn--ghost"
+                  title="重新布局（清除手动拖拽，回到自动排布）"
+                  onClick={() => setReorgNonce((n) => n + 1)}
+                >
+                  ↻ 重排
+                </button>
+              </div>
               <span className="dag-toolbar__meta">
                 {dag.nodes.length} 个任务 · {dag.edges.length} 条依赖
               </span>
@@ -112,7 +145,13 @@ export default function App() {
           </div>
 
           <div className="dag-canvas">
-            <DagView dag={dag} selectedId={selectedId} onSelect={setSelectedId} />
+            <DagView
+              dag={dag}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              layout={layout}
+              reorgNonce={reorgNonce}
+            />
 
             <GatePanel gates={dag.gates} onResolved={refresh} />
 

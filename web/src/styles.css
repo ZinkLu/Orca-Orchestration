@@ -226,6 +226,41 @@ body {
   color: var(--ink-soft);
 }
 
+/* layout switcher — segmented control + re-org */
+.layout-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.seg {
+  display: inline-flex;
+  border: 2px solid var(--line-strong);
+  border-radius: 11px 9px 12px 9px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.seg button {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.seg button + button {
+  border-left: 2px solid var(--line-strong);
+}
+.seg button:hover:not(.active) {
+  color: var(--ink);
+}
+.seg button.active {
+  background: var(--sky-wash);
+  color: var(--ink);
+}
+
 /* ---------- dag canvas ---------- */
 .dag-canvas {
   position: relative;

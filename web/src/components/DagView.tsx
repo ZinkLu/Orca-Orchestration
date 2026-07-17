@@ -16,9 +16,9 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { layoutDag } from "../layout";
+import { applyLayout } from "../layout";
 import { effectiveHarness } from "../harness";
-import { STATUS_META, type DagResponse, type TaskStatus } from "../types";
+import { STATUS_META, type DagResponse, type LayoutKind, type TaskStatus } from "../types";
 
 const ARROW_COLOR = "#8f8672";
 
@@ -27,10 +27,12 @@ type TaskNodeData = {
   status: TaskStatus;
   selected: boolean;
   harness: string;
+  dir: "LR" | "TB";
 };
 
 function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
   const meta = STATUS_META[data.status];
+  const isTB = data.dir === "TB";
   return (
     <div
       className={`task-node${data.selected ? " task-node--selected" : ""}`}
@@ -44,7 +46,7 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
     >
       {/* crayon "colouring-in" overlay — only animates while dispatched */}
       <div className="task-node__fill" aria-hidden="true" />
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={isTB ? Position.Top : Position.Left} />
       <div className="task-node__title">{data.label}</div>
       <div className="task-node__row">
         <div className="task-node__status" style={{ color: meta.ink }}>
@@ -55,7 +57,7 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
           {data.harness}
         </span>
       </div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={isTB ? Position.Bottom : Position.Right} />
     </div>
   );
 }
@@ -66,10 +68,14 @@ function Flow({
   dag,
   selectedId,
   onSelect,
+  layout,
+  reorgNonce,
 }: {
   dag: DagResponse;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  layout: LayoutKind;
+  reorgNonce: number;
 }) {
   const rf = useReactFlow();
   const prevCount = useRef(-1);
@@ -80,10 +86,18 @@ function Flow({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<TaskNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Re-derive nodes/edges from the DAG (dagre layout) whenever it or the
-  // selection changes. User-dragged nodes keep their position; everything else
-  // follows the deterministic layout.
+  // Switching layout algorithm or asking for a re-org discards manual drags so
+  // the graph snaps fully to the fresh auto-layout. Declared before the layout
+  // effect so the ref is cleared before it recomputes.
   useEffect(() => {
+    dragged.current.clear();
+  }, [layout, reorgNonce]);
+
+  // Re-derive nodes/edges from the DAG whenever it, the selection, the layout,
+  // or a re-org changes. User-dragged nodes keep their position; everything
+  // else follows the chosen layout algorithm.
+  useEffect(() => {
+    const dir: "LR" | "TB" = layout === "layered-tb" ? "TB" : "LR";
     const statusById = new Map(dag.nodes.map((n) => [n.id, n.status]));
     const rawNodes: Node<TaskNodeData>[] = dag.nodes.map((n) => ({
       id: n.id,
@@ -94,6 +108,7 @@ function Flow({
         status: n.status,
         selected: n.id === selectedId,
         harness: effectiveHarness(n.id),
+        dir,
       },
     }));
     const rawEdges: Edge[] = dag.edges.map((e) => ({
@@ -104,7 +119,7 @@ function Flow({
       className: statusById.get(e.source) === "dispatched" ? "edge-active" : undefined,
       markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: ARROW_COLOR },
     }));
-    const laid = layoutDag(rawNodes, rawEdges, "LR");
+    const laid = applyLayout(layout, rawNodes, rawEdges);
 
     setNodes((cur) => {
       const curPos = new Map(cur.map((n) => [n.id, n.position]));
@@ -116,10 +131,10 @@ function Flow({
       });
     });
     setEdges(laid.edges);
-  }, [dag, selectedId, setNodes, setEdges]);
+  }, [dag, selectedId, layout, reorgNonce, setNodes, setEdges]);
 
-  // Auto-fit only when the node count changes, so live status polls don't
-  // yank the viewport around while the user is inspecting (or dragging).
+  // Auto-fit when the node count changes, so live status polls don't yank the
+  // viewport while the user is inspecting (or dragging).
   useEffect(() => {
     if (nodes.length !== prevCount.current) {
       prevCount.current = nodes.length;
@@ -127,6 +142,13 @@ function Flow({
       return () => window.clearTimeout(t);
     }
   }, [nodes.length, rf]);
+
+  // Re-fit after a layout switch or re-org (node count is unchanged, so the
+  // effect above won't fire).
+  useEffect(() => {
+    const t = window.setTimeout(() => rf.fitView({ padding: 0.22, duration: 400 }), 90);
+    return () => window.clearTimeout(t);
+  }, [layout, reorgNonce, rf]);
 
   const onNodeDragStart = useCallback((_e: unknown, node: Node) => {
     draggingId.current = node.id;
@@ -178,6 +200,8 @@ export function DagView(props: {
   dag: DagResponse;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  layout: LayoutKind;
+  reorgNonce: number;
 }) {
   return (
     <ReactFlowProvider>

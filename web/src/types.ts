@@ -6,6 +6,15 @@ export type TaskStatus =
   | "failed"
   | "blocked";
 
+/** Canvas layout algorithms the viewer can arrange the DAG with. */
+export type LayoutKind = "layered-lr" | "layered-tb" | "force";
+
+export const LAYOUTS: { kind: LayoutKind; label: string; icon: string; title: string }[] = [
+  { kind: "layered-lr", label: "横向", icon: "⇄", title: "分层布局 · 从左到右（Sugiyama / dagre）" },
+  { kind: "layered-tb", label: "纵向", icon: "⇅", title: "分层布局 · 从上到下（Sugiyama / dagre）" },
+  { kind: "force", label: "力导", icon: "❋", title: "力导向布局（Fruchterman–Reingold）" },
+];
+
 export interface DagNode {
   id: string;
   label: string;
