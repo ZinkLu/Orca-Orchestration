@@ -692,33 +692,6 @@ body {
   display: none;
 }
 
-/* ---------- theme toggle ---------- */
-.theme-toggle {
-  display: inline-flex;
-  border: 2px solid var(--line-strong);
-  border-radius: 12px 10px 12px 10px;
-  overflow: hidden;
-  background: var(--paper);
-}
-.theme-toggle button {
-  font-family: var(--font-display);
-  font-size: 12.5px;
-  letter-spacing: 0.3px;
-  padding: 6px 12px;
-  border: none;
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.theme-toggle button + button {
-  border-left: 2px solid var(--line-strong);
-}
-.theme-toggle button.active {
-  background: var(--sky-wash);
-  color: var(--ink);
-}
-
 /* ============================================================
    Motion — nodes pop onto the paper as the DAG grows.
    ============================================================ */
@@ -763,82 +736,4 @@ body {
     transition: none !important;
     animation: none !important;
   }
-}
-
-/* ============================================================
-   DOODLE theme — ink-forward notebook sketch (Excalidraw-ish).
-   Keeps the soft status wash fills, but swaps to black pen
-   outlines, a rougher wobble, grid paper, and a handwriting face.
-   ============================================================ */
-:root[data-theme="doodle"] {
-  --paper: #fbfbf7;
-  --paper-2: #f4f5ef;
-  --paper-3: #ecece4;
-  --ink: #2c2a30;
-  --ink-soft: #6c6a73;
-  --line: #e0e0d6;
-  --line-strong: #cbcabf;
-  --shadow-sticker: 3px 3px 0 rgba(44, 42, 48, 0.16);
-  --shadow-soft: 0 6px 16px rgba(44, 42, 48, 0.08);
-  --font-display: "Kalam", "ZCOOL QingKe HuangYou", "PingFang SC", "Microsoft YaHei", cursive;
-  /* Latin -> Kalam; every CJK glyph -> ZCOOL QingKe HuangYou (marker) so the
-     whole doodle UI reads hand-drawn, not just the headings. */
-  --font-body: "Kalam", "ZCOOL QingKe HuangYou", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
-}
-
-/* every task box is drawn in pen */
-[data-theme="doodle"] .task-node::before {
-  border-color: var(--ink);
-  border-width: 2.2px;
-  filter: url(#doodle);
-}
-[data-theme="doodle"] .task-node__title {
-  font-weight: 700;
-}
-[data-theme="doodle"] .task-node__status .dot,
-[data-theme="doodle"] .legend__dot {
-  border: 1.5px solid var(--ink);
-}
-[data-theme="doodle"] .react-flow__edge-path {
-  stroke: var(--ink);
-  stroke-width: 1.7;
-  filter: url(#doodle-edge);
-}
-[data-theme="doodle"] .react-flow__handle {
-  border-color: var(--ink);
-}
-
-/* dashed paper folds become solid ink hairlines */
-[data-theme="doodle"] .topbar {
-  border-bottom: 2px solid var(--ink);
-}
-[data-theme="doodle"] .dag-toolbar {
-  border-bottom: 2px solid var(--ink);
-}
-
-/* ink-outlined chrome */
-[data-theme="doodle"] .exec__select,
-[data-theme="doodle"] .exec__custom,
-[data-theme="doodle"] .exec__num,
-[data-theme="doodle"] .node-panel__select,
-[data-theme="doodle"] .node-panel__custom,
-[data-theme="doodle"] .task-node__harness,
-[data-theme="doodle"] .node-panel,
-[data-theme="doodle"] .conn {
-  border-color: var(--ink);
-}
-[data-theme="doodle"] .gate {
-  border: 2px solid var(--ink);
-}
-[data-theme="doodle"] .btn--run,
-[data-theme="doodle"] .btn--stop-run {
-  color: var(--ink);
-  border-color: var(--ink);
-}
-[data-theme="doodle"] .theme-toggle,
-[data-theme="doodle"] .theme-toggle button + button {
-  border-color: var(--ink);
-}
-[data-theme="doodle"] .theme-toggle button.active {
-  background: var(--paper-3);
 }

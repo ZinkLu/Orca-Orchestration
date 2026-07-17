@@ -11,8 +11,6 @@
 
 ![蜡笔风：全宽 DAG + 默认 harness/最多并行/Run 工具条 + 每节点 harness 选择的只读节点详情](docs/screenshot.png)
 
-![涂鸦风：方格纸 + 黑墨钢笔描边的同一张 DAG](docs/screenshot-doodle.png)
-
 ## 它是怎么工作的
 
 ```
@@ -80,7 +78,7 @@ orca-dag                             # 起在 http://localhost:8787，自动开�
 - **▶ 让 Orca 执行 / ⏹ 停止** + **最多并行**：启动/停止 viewer 内置的自驱动 coordinator；worker 数由 DAG 并行度决定(能并行就并行,受"最多并行"上限约束)、按需拉起、空闲复用、跑完回收 —— **不用手动加 worker**。执行中显示"N worker"。
 - **审批门**：agent `gate-create` 后，DAG 上浮出「批准 / 驳回」。
 - **节点详情（只读 spec）**：点节点看 spec / 状态 / 结果。改描述或依赖 → 让 agent 重绘 DAG。
-- **两套手绘主题**：🖍️ 蜡笔 / ✏️ 涂鸦，顶栏切换，记忆到 localStorage。
+- **手绘蜡笔风**：🖍️ SVG feTurbulence 波动描边 + 米色速写本画布。
 
 ## HTTP 接口
 
@@ -104,7 +102,7 @@ server/src/
   orca.ts                 orca CLI 封装：task-list→DAG、spawnWorker(自主 agent)、dispatchTask、close
   webAssets.ts            编译期内嵌前端资源的加载器（生产二进制用）
 web/src/
-  App.tsx                 全宽 DAG 主壳、每 2s 轮询、主题切换
+  App.tsx                 全宽 DAG 主壳、每 2s 轮询
   components/DagView.tsx     React Flow 图 + 状态节点（含 harness 标签）
   components/ExecControls.tsx 默认 harness + 最多并行 + Run/Stop + 实时状态
   components/NodePanel.tsx    节点详情 + 每节点 harness 选择

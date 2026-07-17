@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { layoutDag } from "../layout";
 import { effectiveHarness } from "../harness";
-import { STATUS_META, type DagResponse, type TaskStatus, type Theme } from "../types";
+import { STATUS_META, type DagResponse, type TaskStatus } from "../types";
 
 type TaskNodeData = {
   label: string;
@@ -59,16 +59,14 @@ function Flow({
   dag,
   selectedId,
   onSelect,
-  theme,
 }: {
   dag: DagResponse;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  theme: Theme;
 }) {
   const rf = useReactFlow();
   const prevCount = useRef(-1);
-  const arrowColor = theme === "doodle" ? "#2c2a30" : "#b7b0a0";
+  const arrowColor = "#8f8672";
 
   const { nodes, edges } = useMemo(() => {
     const rawNodes: Node<TaskNodeData>[] = dag.nodes.map((n) => ({
@@ -129,11 +127,7 @@ function Flow({
       onNodeClick={(_, n) => onSelect(n.id === selectedId ? null : n.id)}
       onPaneClick={() => onSelect(null)}
     >
-      {theme === "doodle" ? (
-        <Background variant={BackgroundVariant.Lines} gap={26} size={1} color="rgba(60,66,86,0.09)" />
-      ) : (
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.4} color="rgba(74,71,84,0.14)" />
-      )}
+      <Background variant={BackgroundVariant.Dots} gap={24} size={1.4} color="rgba(74,71,84,0.14)" />
       <Controls showInteractive={false} />
     </ReactFlow>
   );
@@ -143,7 +137,6 @@ export function DagView(props: {
   dag: DagResponse;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  theme: Theme;
 }) {
   return (
     <ReactFlowProvider>

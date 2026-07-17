@@ -4,15 +4,14 @@ import { ExecControls } from "./components/ExecControls";
 import { GatePanel } from "./components/GatePanel";
 import { NodePanel } from "./components/NodePanel";
 import { fetchDag, resetTasks } from "./api";
-import { STATUS_META, type DagResponse, type TaskStatus, type Theme } from "./types";
+import { STATUS_META, type DagResponse, type TaskStatus } from "./types";
 
 const EMPTY: DagResponse = { nodes: [], edges: [], gates: [], generatedAt: 0 };
 const POLL_MS = 2000;
 
 /**
- * Hand-drawn wobble filters. `crayon` = gentle waxy waver; `doodle` = rougher,
- * higher-frequency pen jitter (the Excalidraw-ish sketch). CSS picks which
- * filter applies per theme via the `data-theme` attribute.
+ * Hand-drawn wobble filters (crayon): a gentle waxy waver applied to node
+ * outlines and edges via SVG displacement. Referenced by CSS `filter: url(#…)`.
  */
 function HandDrawnDefs() {
   return (
@@ -26,37 +25,16 @@ function HandDrawnDefs() {
           <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="2" seed="3" result="n" />
           <feDisplacementMap in="SourceGraphic" in2="n" scale="7.5" xChannelSelector="R" yChannelSelector="G" />
         </filter>
-        <filter id="doodle" x="-12%" y="-12%" width="124%" height="124%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="3" seed="11" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-        <filter id="doodle-edge" x="-30%" y="-30%" width="160%" height="160%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="5" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
       </defs>
     </svg>
   );
 }
 
-const THEME_META: Record<Theme, { label: string; icon: string }> = {
-  crayon: { label: "蜡笔", icon: "🖍️" },
-  doodle: { label: "涂鸦", icon: "✏️" },
-};
-
 export default function App() {
   const [dag, setDag] = useState<DagResponse>(EMPTY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connError, setConnError] = useState(false);
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem("theme") as Theme) || "crayon",
-  );
   const timer = useRef<number | null>(null);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("theme", theme);
-  }, [theme]);
 
   const refresh = useCallback(async () => {
     try {
@@ -106,18 +84,6 @@ export default function App() {
           </div>
         </div>
         <div className="topbar__right">
-          <div className="theme-toggle" role="group" aria-label="切换手绘风格">
-            {(Object.keys(THEME_META) as Theme[]).map((t) => (
-              <button
-                key={t}
-                className={theme === t ? "active" : ""}
-                aria-pressed={theme === t}
-                onClick={() => setTheme(t)}
-              >
-                <span aria-hidden="true">{THEME_META[t].icon}</span> {THEME_META[t].label}
-              </button>
-            ))}
-          </div>
           <div className={`conn ${connError ? "conn--bad" : "conn--ok"}`}>
             {connError ? "无法连接后端" : "已连接 Orca"}
           </div>
@@ -148,7 +114,7 @@ export default function App() {
           </div>
 
           <div className="dag-canvas">
-            <DagView dag={dag} selectedId={selectedId} onSelect={setSelectedId} theme={theme} />
+            <DagView dag={dag} selectedId={selectedId} onSelect={setSelectedId} />
 
             <GatePanel gates={dag.gates} onResolved={refresh} />
 

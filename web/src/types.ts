@@ -6,9 +6,6 @@ export type TaskStatus =
   | "failed"
   | "blocked";
 
-/** Hand-drawn visual theme. */
-export type Theme = "crayon" | "doodle";
-
 export interface DagNode {
   id: string;
   label: string;
