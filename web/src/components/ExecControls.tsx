@@ -56,6 +56,7 @@ export function ExecControls({ taskIds }: { taskIds: string[] }) {
     try {
       const s = await startRun(harnessMap(taskIdsRef.current), resolvedDefault, maxConcurrency);
       setStatus(s);
+      window.dispatchEvent(new Event("orca:run-start"));
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {

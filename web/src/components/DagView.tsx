@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -22,6 +22,53 @@ import { STATUS_META, type DagResponse, type LayoutKind, type TaskStatus } from 
 
 const ARROW_COLOR = "#8f8672";
 
+/** Deterministic PRNG so each node's scribble stays stable across polls. */
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashId(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * A genuine hand scrawl: irregular curvy strokes wandering all over the box,
+ * overlapping like someone colouring furiously without lifting the crayon.
+ * Seeded by the node id, so every task gets its own "handwriting".
+ */
+function scribblePath(seedId: string, w = 210, h = 72): string {
+  const rand = mulberry32(hashId(seedId));
+  const pts: [number, number][] = [];
+  let x = -4;
+  let y = h * (0.35 + rand() * 0.3);
+  pts.push([x, y]);
+  while (x < w + 4) {
+    x += 7 + rand() * 15;
+    y = 5 + rand() * (h - 10);
+    pts.push([x, y]);
+  }
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const [px, py] = pts[i - 1];
+    const [cx, cy] = pts[i];
+    const mx = (px + cx) / 2 + (rand() - 0.5) * 18;
+    const my = (py + cy) / 2 + (rand() - 0.5) * 22;
+    d += ` Q${mx.toFixed(1)},${my.toFixed(1)} ${cx.toFixed(1)},${cy.toFixed(1)}`;
+  }
+  return d;
+}
+
 type TaskNodeData = {
   label: string;
   status: TaskStatus;
@@ -30,9 +77,12 @@ type TaskNodeData = {
   dir: "LR" | "TB";
 };
 
-function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
+function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
   const meta = STATUS_META[data.status];
   const isTB = data.dir === "TB";
+  // two passes over the same box: a bold stroke plus a thinner, lighter one
+  // running half a beat behind — colouring over the same spot twice
+  const [scrawlA, scrawlB] = useMemo(() => [scribblePath(id), scribblePath(`${id}~2`)], [id]);
   return (
     <div
       className={`task-node${data.selected ? " task-node--selected" : ""}`}
@@ -44,8 +94,37 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
         } as CSSProperties
       }
     >
-      {/* crayon "colouring-in" overlay — only animates while dispatched */}
-      <div className="task-node__fill" aria-hidden="true" />
+      {/* crayon scribble — a real hand scrawl that draws itself over and
+          over while the task runs; two passes, unique per node */}
+      {data.status === "dispatched" && (
+        <svg
+          className="task-node__scribble"
+          viewBox="0 0 210 72"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path pathLength={1000} d={scrawlA} />
+          <path pathLength={1000} d={scrawlB} strokeOpacity={0.55} />
+        </svg>
+      )}
+      {/* red-pen cross-out, drawn on when the task fails */}
+      {data.status === "failed" && (
+        <svg
+          className="task-node__cross"
+          viewBox="0 0 210 72"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M4,10 C60,26 150,44 206,62" />
+          <path d="M206,10 C150,26 60,46 4,60" />
+        </svg>
+      )}
+      {/* teacher's red-pen tick, stamped on when the task completes */}
+      {data.status === "completed" && (
+        <div className="task-node__stamp" aria-hidden="true">
+          ✓
+        </div>
+      )}
       <Handle type="target" position={isTB ? Position.Top : Position.Left} />
       <div className="task-node__title">{data.label}</div>
       <div className="task-node__row">
@@ -63,6 +142,61 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
 }
 
 const nodeTypes = { task: TaskNode };
+
+/** Event fired (on window) when the user hits "让 Orca 执行" — the canvas
+    celebrates with a paper-plane flyby. */
+export const RUN_START_EVENT = "orca:run-start";
+
+const CONFETTI_COLORS = ["#7bb7e0", "#f2a0a6", "#7fc98c", "#f0b94e", "#ea6b5e", "#b79fe0"];
+
+/** Paper-scrap rain, rendered once when every task reaches `completed`. */
+function Confetti() {
+  const bits = useMemo(
+    () =>
+      Array.from({ length: 48 }, (_, i) => ({
+        left: Math.random() * 100,
+        delay: Math.random() * 2.4,
+        duration: 2.6 + Math.random() * 1.8,
+        size: 7 + Math.random() * 6,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        spin: (Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 540),
+      })),
+    [],
+  );
+  return (
+    <div className="confetti" aria-hidden="true">
+      {bits.map((b, i) => (
+        <span
+          key={i}
+          className="confetti__bit"
+          style={
+            {
+              left: `${b.left}%`,
+              width: b.size,
+              height: b.size * 0.7,
+              background: b.color,
+              animationDelay: `${b.delay}s`,
+              animationDuration: `${b.duration}s`,
+              "--spin": `${b.spin}deg`,
+            } as CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** A paper plane soaring bottom-left → top-right; one mount = one flight. */
+function PaperPlane({ onDone }: { onDone: () => void }) {
+  return (
+    <div className="plane-flyby" onAnimationEnd={onDone} aria-hidden="true">
+      <svg viewBox="0 0 40 40" className="plane-flyby__icon">
+        <path d="M2,22 L38,4 L16,38 L13,25 Z" />
+        <path className="fold" d="M13,25 L38,4" />
+      </svg>
+    </div>
+  );
+}
 
 function Flow({
   dag,
@@ -85,6 +219,15 @@ function Flow({
   const draggingId = useRef<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<TaskNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // increments per run-start event; the mounted plane unmounts itself at the
+  // end of its flight
+  const [flight, setFlight] = useState(0);
+
+  useEffect(() => {
+    const onRunStart = () => setFlight((n) => n + 1);
+    window.addEventListener(RUN_START_EVENT, onRunStart);
+    return () => window.removeEventListener(RUN_START_EVENT, onRunStart);
+  }, []);
 
   // Switching layout algorithm or asking for a re-org discards manual drags so
   // the graph snaps fully to the fresh auto-layout. Declared before the layout
@@ -172,27 +315,33 @@ function Flow({
     );
   }
 
+  const allDone = dag.nodes.length > 0 && dag.nodes.every((n) => n.status === "completed");
+
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeDragStart={onNodeDragStart}
-      onNodeDragStop={onNodeDragStop}
-      nodeTypes={nodeTypes}
-      fitView
-      nodesDraggable
-      nodesConnectable={false}
-      elementsSelectable
-      minZoom={0.2}
-      proOptions={{ hideAttribution: true }}
-      onNodeClick={(_, n) => onSelect(n.id === selectedId ? null : n.id)}
-      onPaneClick={() => onSelect(null)}
-    >
-      <Background variant={BackgroundVariant.Dots} gap={24} size={1.4} color="rgba(74,71,84,0.14)" />
-      <Controls showInteractive={false} />
-    </ReactFlow>
+    <>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDragStop={onNodeDragStop}
+        nodeTypes={nodeTypes}
+        fitView
+        nodesDraggable
+        nodesConnectable={false}
+        elementsSelectable
+        minZoom={0.2}
+        proOptions={{ hideAttribution: true }}
+        onNodeClick={(_, n) => onSelect(n.id === selectedId ? null : n.id)}
+        onPaneClick={() => onSelect(null)}
+      >
+        <Background variant={BackgroundVariant.Lines} gap={30} color="rgba(96,132,178,0.085)" />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+      {flight > 0 && <PaperPlane key={flight} onDone={() => setFlight(0)} />}
+      {allDone && <Confetti />}
+    </>
   );
 }
 

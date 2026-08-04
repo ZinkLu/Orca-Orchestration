@@ -391,47 +391,228 @@ body {
   display: inline-block;
 }
 
-/* ---------- in-progress: crayon colours the box in ----------
-   A diagonal crayon hatch that fills the node from the bottom up, over and
-   over, while the task is `dispatched` (running). Sits behind the text. */
-.task-node__fill {
+/* ---------- in-progress: a real crayon scribble --------------------------
+   A random curvy scrawl (generated per node from its id) that draws itself
+   across the box, holds, fades, and starts over — then a second, thinner
+   pass follows half a beat behind, colouring over the same spot twice. */
+.task-node__scribble {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: inherit;
+  overflow: hidden;
   z-index: 0;
-  opacity: 0;
   pointer-events: none;
-  background-image: repeating-linear-gradient(
-    48deg,
-    color-mix(in srgb, var(--crayon, #d98a3d) 62%, transparent) 0 2.6px,
-    transparent 2.6px 6.5px
-  );
+}
+.task-node__scribble path {
+  fill: none;
+  stroke: var(--crayon, #d98a3d);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   filter: url(#crayon);
+  /* pathLength={1000} normalizes the random path so the dash math is exact */
+  stroke-dasharray: 1000;
+  animation: scribble-draw 1.7s ease-in-out infinite;
+}
+.task-node__scribble path + path {
+  stroke-width: 4.5;
+  animation-delay: 0.45s;
 }
 .task-node__title,
 .task-node__row {
   position: relative;
   z-index: 1;
 }
-.task-node[data-status="dispatched"] .task-node__fill {
-  animation: crayon-fill 1.7s ease-in-out infinite;
-}
-@keyframes crayon-fill {
+@keyframes scribble-draw {
   0% {
+    stroke-dashoffset: 1000;
     opacity: 0;
-    clip-path: inset(100% 0 0 0);
   }
-  18% {
-    opacity: 0.85;
+  15% {
+    opacity: 0.4;
   }
   62%,
-  82% {
-    opacity: 0.85;
-    clip-path: inset(0 0 0 0);
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 0.4;
   }
   100% {
+    stroke-dashoffset: 0;
     opacity: 0;
-    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* ---------- failed: crossed out in red crayon -----------------------------
+   Two strokes scrawled over the box, drawn on one after the other. Sits above
+   the text, like the teacher marking a wrong answer. */
+.task-node__cross {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+.task-node__cross path {
+  fill: none;
+  stroke: #d1543f;
+  stroke-width: 6;
+  stroke-linecap: round;
+  opacity: 0.7;
+  filter: url(#crayon);
+  stroke-dasharray: 400;
+  stroke-dashoffset: 400;
+  animation: cross-draw 0.4s ease-out forwards;
+}
+.task-node__cross path:nth-child(2) {
+  animation-delay: 0.22s;
+}
+@keyframes cross-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---------- completion stamp (teacher's tick) ---------- */
+.task-node__stamp {
+  position: absolute;
+  top: -12px;
+  left: -10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--meadow);
+  border: 2px solid #4f9e5d;
+  border-radius: 50% 46% 52% 48%;
+  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.16);
+  transform: rotate(-12deg);
+  z-index: 2;
+  pointer-events: none;
+  /* slams on oversized, settles back — like pressing a stamp into paper */
+  animation: stamp-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+}
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: rotate(-35deg) scale(1.9);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(-8deg) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-12deg) scale(1);
+  }
+}
+/* ink flecks flung out as the stamp slams down; ends invisible */
+.task-node__stamp::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  box-shadow:
+    17px -9px 0 #7fc98c,
+    -15px -13px 0 #4f9e5d,
+    20px 10px 0 #a8dcb1,
+    -19px 7px 0 #7fc98c,
+    6px -19px 0 #4f9e5d,
+    -8px 17px 0 #a8dcb1;
+  animation: splat 0.55s ease-out 0.3s backwards;
+}
+@keyframes splat {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* ---------- paper-plane flyby (run kicked off) ---------- */
+.plane-flyby {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  pointer-events: none;
+  animation: plane-flight 2.4s cubic-bezier(0.3, 0.6, 0.6, 1) forwards;
+}
+.plane-flyby__icon {
+  width: 46px;
+  height: 46px;
+  transform: rotate(8deg);
+  filter: drop-shadow(2px 3px 0 rgba(74, 71, 84, 0.18));
+}
+.plane-flyby__icon path {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.plane-flyby__icon .fold {
+  fill: none;
+  stroke-width: 1.5;
+}
+@keyframes plane-flight {
+  0% {
+    transform: translate(-70px, 78vh) rotate(4deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  45% {
+    transform: translate(42vw, 30vh) rotate(-5deg);
+  }
+  75% {
+    transform: translate(75vw, 22vh) rotate(6deg);
+  }
+  100% {
+    transform: translate(108vw, -8vh) rotate(2deg);
+    opacity: 1;
+  }
+}
+
+/* ---------- confetti rain (every task completed) ---------- */
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
+.confetti__bit {
+  position: absolute;
+  top: -16px;
+  border-radius: 2px;
+  border: 1px solid rgba(74, 71, 84, 0.2);
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.3, 0.4, 0.6, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(105vh) rotate(var(--spin, 540deg));
   }
 }
 
@@ -828,6 +1009,48 @@ body {
   to {
     opacity: 1;
     transform: translateX(0) rotate(0);
+  }
+}
+
+/* a failed task wobbles once, like the crayon slipped off the line. Plays
+   once when the status flips (the selector newly matches), then holds still.
+   The `animation` shorthand replaces the base node-in, so it's repeated here. */
+.task-node[data-status="failed"] {
+  animation:
+    node-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards,
+    fail-shake 0.5s ease-in-out 0.15s;
+}
+@keyframes fail-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px) rotate(-0.7deg);
+  }
+  40% {
+    transform: translateX(4px) rotate(0.6deg);
+  }
+  60% {
+    transform: translateX(-3px) rotate(-0.4deg);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+/* a pending gate drops onto the canvas and settles with a soft bounce */
+.gate {
+  animation: gate-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.25) backwards;
+}
+@keyframes gate-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) rotate(-2.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-0.6deg);
   }
 }
 
