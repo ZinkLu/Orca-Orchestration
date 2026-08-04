@@ -2,19 +2,31 @@ import { useState } from "react";
 import { resolveGate } from "../api";
 import type { Gate } from "../types";
 
-export function GatePanel({ gates, onResolved }: { gates: Gate[]; onResolved: () => void }) {
+/**
+ * Pending decision gates. Resolving one is a Run-scoped mutation, so the server
+ * has to borrow a coordinator terminal for it — see `asCoordinator` there.
+ */
+export function GatePanel({
+  gates,
+  runId,
+  onResolved,
+}: {
+  gates: Gate[];
+  runId: string;
+  onResolved: () => void;
+}) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const pending = gates.filter((g) => g.status === "pending" || g.status === "open" || !g.resolution);
 
-  if (pending.length === 0) return null;
+  if (pending.length === 0 || !runId) return null;
 
   async function resolve(gate: Gate, resolution: string) {
     setBusyId(gate.id);
     try {
-      await resolveGate(gate.id, resolution);
+      await resolveGate(gate.id, resolution, runId);
       onResolved();
     } catch (err) {
-      alert(`审批失败：${String(err)}`);
+      alert(`审批失败：${String((err as Error).message ?? err)}`);
     } finally {
       setBusyId(null);
     }

@@ -52,7 +52,7 @@ body {
   color: var(--ink);
   background-color: var(--paper);
   /* faint paper grain */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 }
 
 /* hidden SVG holding the crayon displacement filters */
@@ -71,6 +71,7 @@ body {
 
 /* ---------- top bar (a taped paper header) ---------- */
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -78,23 +79,145 @@ body {
   background: var(--paper);
   border-bottom: 2.5px dashed var(--line-strong);
 }
+/* a strip of washi tape holding the header down onto the page below. Sits on
+   the topbar's bottom edge, not its top — anything above it is clipped by the
+   viewport. */
+.topbar__tape {
+  position: absolute;
+  bottom: -11px;
+  left: 44%;
+  width: 96px;
+  height: 21px;
+  z-index: 2;
+  transform: rotate(-2.5deg);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(123, 183, 224, 0.28) 0 6px,
+    rgba(123, 183, 224, 0.14) 6px 12px
+  );
+  border-left: 1px dashed rgba(62, 123, 166, 0.3);
+  border-right: 1px dashed rgba(62, 123, 166, 0.3);
+  pointer-events: none;
+}
 .topbar__brand {
   display: flex;
   align-items: center;
   gap: 13px;
 }
+/* the mascot: a whale doodled in the same crayon as the graph. The wobble is
+   the fine-grain filter (small drawing, small grain); it boils like every
+   other line, and still swims (transform) — the two animate different
+   properties, so they compose. */
 .topbar__logo {
-  font-size: 30px;
-  filter: drop-shadow(1px 1px 0 rgba(74, 71, 84, 0.15));
+  width: 46px;
+  height: 38px;
+  overflow: visible;
+  filter: url(#crayon-fine) drop-shadow(1px 1.5px 0 rgba(74, 71, 84, 0.18));
   transform: rotate(-6deg);
+  transform-origin: 50% 70%;
+  animation: whale-boil 0.6s steps(1, end) infinite,
+    whale-bob 5.5s ease-in-out infinite;
+}
+@keyframes whale-boil {
+  0% { filter: url(#crayon-fine) drop-shadow(1px 1.5px 0 rgba(74, 71, 84, 0.18)); }
+  33% { filter: url(#crayon-fine-b) drop-shadow(1px 1.5px 0 rgba(74, 71, 84, 0.18)); }
+  66% { filter: url(#crayon-fine-c) drop-shadow(1px 1.5px 0 rgba(74, 71, 84, 0.18)); }
+}
+/* the whale idles in place — a slow swim, not a bounce */
+@keyframes whale-bob {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  30% { transform: rotate(-2deg) translateY(-3px); }
+  60% { transform: rotate(-9deg) translateY(1.5px); }
+}
+.topbar__brand:hover .topbar__logo {
+  animation: whale-boil 0.6s steps(1, end) infinite,
+    whale-dive 0.7s ease-in-out;
+}
+@keyframes whale-dive {
+  40% { transform: rotate(14deg) translateY(-7px) scale(1.12); }
+  70% { transform: rotate(-12deg) translateY(2px) scale(0.97); }
+}
+/* an orca, drawn in crayon: soft-black body (pure black would punch a hole in
+   the pastel page), white belly and eye patch crayoned over the top — a doodle
+   is layered strokes, so the white slightly overshooting the silhouette is
+   part of the charm, not a bug */
+.orca__body {
+  fill: var(--ink);
+  stroke: #35323e;
+  stroke-width: 4;
+  stroke-linejoin: round;
+}
+.orca__tail {
+  fill: var(--ink);
+  stroke: #35323e;
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.orca__belly,
+.orca__patch {
+  fill: #fdfcf6;
+  stroke: none;
+  opacity: 0.96;
+}
+.orca__eye {
+  fill: #35323e;
+}
+.orca__flipper {
+  fill: none;
+  stroke: rgba(253, 252, 246, 0.85);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.orca__smile {
+  fill: none;
+  stroke: #35323e;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+.orca__spout path {
+  fill: none;
+  stroke: var(--sky);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+}
+/* the spout puffs in time with the swim */
+.orca__spout {
+  transform-origin: 24px 12px;
+  animation: spout-puff 5.5s ease-in-out infinite;
+}
+@keyframes spout-puff {
+  0%, 18%, 62%, 100% { opacity: 0.4; transform: scale(0.82); }
+  30%, 46% { opacity: 1; transform: scale(1.06); }
 }
 .topbar__title {
+  position: relative;
+  display: inline-block;
   font-family: var(--font-display);
   font-size: 19px;
   color: var(--ink);
   letter-spacing: 0.5px;
 }
+/* a crayon underline that draws itself in on load */
+.topbar__title::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -3px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--sky) 0%, var(--lilac) 60%, transparent 100%);
+  opacity: 0.55;
+  transform-origin: left center;
+  animation: underline-draw 0.85s cubic-bezier(0.35, 0.9, 0.4, 1) 0.25s backwards;
+}
+@keyframes underline-draw {
+  from { transform: scaleX(0); opacity: 0; }
+  to { transform: scaleX(1); opacity: 0.55; }
+}
 .topbar__subtitle {
+  margin-top: 3px;
   font-size: 12.5px;
   color: var(--ink-soft);
 }
@@ -114,6 +237,7 @@ body {
   border: 2px solid var(--line-strong);
   background: var(--paper);
   color: var(--ink-soft);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 .conn::before {
   content: "";
@@ -121,6 +245,21 @@ body {
   height: 9px;
   border-radius: 50%;
   background: currentColor;
+}
+/* healthy link: a slow heartbeat. Broken link: an anxious blink. */
+.conn--ok::before {
+  animation: conn-beat 2.6s ease-in-out infinite;
+}
+.conn--bad::before {
+  animation: conn-alarm 0.9s steps(1, end) infinite;
+}
+@keyframes conn-beat {
+  0%, 62%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(88, 171, 107, 0.45); }
+  70% { transform: scale(1.25); box-shadow: 0 0 0 5px rgba(88, 171, 107, 0); }
+}
+@keyframes conn-alarm {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.25; }
 }
 .conn--ok {
   color: #58ab6b;
@@ -153,9 +292,10 @@ body {
 
 /* ---------- buttons (crayon stickers) ---------- */
 .btn {
+  position: relative;
   font-family: var(--font-display);
-  border: 2.5px solid var(--ink);
-  border-radius: 14px 12px 15px 11px;
+  border: 3px solid var(--ink);
+  border-radius: 15px 11px 16px 10px;
   padding: 9px 20px;
   font-size: 14px;
   letter-spacing: 0.4px;
@@ -163,19 +303,38 @@ body {
   color: var(--ink);
   background: var(--paper);
   box-shadow: var(--shadow-sticker);
-  transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.1s ease;
+  transition: transform 0.12s cubic-bezier(0.3, 1.4, 0.5, 1), box-shadow 0.12s ease,
+    filter 0.12s ease, background 0.15s ease;
 }
 .btn:hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 rgba(74, 71, 84, 0.18);
+  transform: translate(-1px, -2px) rotate(-0.7deg);
+  box-shadow: 4px 5px 0 rgba(74, 71, 84, 0.18);
 }
 .btn:active:not(:disabled) {
-  transform: translate(2px, 2px);
+  transform: translate(2px, 2px) rotate(0.3deg);
   box-shadow: 1px 1px 0 rgba(74, 71, 84, 0.18);
+  filter: brightness(0.97);
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* the sticker peels a little when pressed — a highlight sweeping across the wax */
+.btn:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.55) 50%, transparent 65%);
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-position 0.5s ease, opacity 0.2s ease;
+}
+.btn:hover:not(:disabled)::after {
+  opacity: 1;
+  background-position: -30% 0;
 }
 .btn--ghost {
   padding: 7px 15px;
@@ -192,6 +351,7 @@ body {
 
 /* ---------- dag toolbar ---------- */
 .dag-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -213,17 +373,98 @@ body {
   font-size: 12.5px;
   color: var(--ink-soft);
   font-weight: 500;
+  opacity: 0.6;
+  transition: opacity 0.25s ease, transform 0.15s ease;
+}
+/* a status only earns full contrast once something is actually in it */
+.legend__item--live {
+  opacity: 1;
+  color: var(--ink);
+}
+.legend__item:hover {
+  transform: translateY(-1px);
+  opacity: 1;
 }
 .legend__dot {
   width: 12px;
   height: 12px;
   border-radius: 40% 55% 48% 52%;
   border: 1.5px solid rgba(74, 71, 84, 0.25);
+  transition: transform 0.2s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.legend__item:hover .legend__dot {
+  transform: scale(1.35) rotate(12deg);
+}
+/* the "running" swatch keeps time with the nodes it stands for */
+.legend__item--live[data-status="dispatched"] .legend__dot {
+  animation: legend-throb 1.5s ease-in-out infinite;
+}
+@keyframes legend-throb {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3) rotate(-8deg); }
+}
+.legend__n {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 2.5px 6px 2px;
+  border-radius: 8px 6px 7px 5px;
+  background: var(--paper-2);
+  border: 1.5px solid var(--line);
+  color: var(--ink);
+  animation: count-bump 0.34s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes count-bump {
+  from { transform: scale(0.5) rotate(-8deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
 }
 .dag-toolbar__meta {
   font-family: var(--font-display);
   font-size: 12.5px;
   color: var(--ink-soft);
+}
+
+/* the toolbar's bottom rule doubles as a crayon progress strip: completed →
+   running → failed, each segment growing in place as the run advances */
+.dag-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2.5px;
+  height: 4px;
+  display: flex;
+  pointer-events: none;
+}
+.dag-progress__seg {
+  height: 100%;
+  transition: width 0.6s cubic-bezier(0.25, 0.9, 0.3, 1);
+}
+.dag-progress__seg--done {
+  background: repeating-linear-gradient(
+    62deg,
+    var(--meadow) 0 3px,
+    color-mix(in srgb, var(--meadow) 55%, transparent) 3px 5px
+  );
+}
+.dag-progress__seg--run {
+  background: repeating-linear-gradient(
+    62deg,
+    var(--butter) 0 3px,
+    color-mix(in srgb, var(--butter) 45%, transparent) 3px 5px
+  );
+  background-size: 14px 100%;
+  animation: progress-crawl 1.1s linear infinite;
+}
+@keyframes progress-crawl {
+  to { background-position: 14px 0; }
+}
+.dag-progress__seg--fail {
+  background: repeating-linear-gradient(
+    62deg,
+    var(--coral) 0 3px,
+    color-mix(in srgb, var(--coral) 45%, transparent) 3px 5px
+  );
 }
 
 /* layout switcher — segmented control + re-org */
@@ -240,6 +481,7 @@ body {
   background: var(--paper);
 }
 .seg button {
+  position: relative;
   font-family: var(--font-display);
   font-size: 12px;
   letter-spacing: 0.3px;
@@ -248,17 +490,43 @@ body {
   background: transparent;
   color: var(--ink-soft);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 .seg button + button {
   border-left: 2px solid var(--line-strong);
 }
 .seg button:hover:not(.active) {
   color: var(--ink);
+  background: rgba(123, 183, 224, 0.1);
 }
 .seg button.active {
   background: var(--sky-wash);
   color: var(--ink);
+}
+/* the active tab is coloured in with a crayon swipe, not a hard fill */
+.seg button.active::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 3px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--sky);
+  transform-origin: left center;
+  animation: seg-swipe 0.3s cubic-bezier(0.3, 0.9, 0.35, 1);
+}
+@keyframes seg-swipe {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+/* re-layout button: the arrow spins when you ask for a re-org */
+.layout-ctl .btn--ghost:active:not(:disabled) {
+  animation: reorg-spin 0.6s cubic-bezier(0.3, 0.9, 0.3, 1);
+}
+@keyframes reorg-spin {
+  from { transform: rotate(0) translate(2px, 2px); }
+  to { transform: rotate(360deg) translate(2px, 2px); }
 }
 
 /* ---------- dag canvas ---------- */
@@ -267,6 +535,21 @@ body {
   flex: 1;
   min-height: 0;
   background: var(--paper-2);
+}
+/* the page curls away at the edges — a soft vignette gives the paper depth
+   without touching anything interactive */
+.dag-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(
+    120% 95% at 50% 45%,
+    transparent 55%,
+    rgba(120, 110, 88, 0.07) 82%,
+    rgba(120, 110, 88, 0.16) 100%
+  );
 }
 .react-flow {
   background: transparent;
@@ -283,10 +566,29 @@ body {
   color: var(--ink-soft);
   pointer-events: none;
 }
+.dag-empty > * {
+  animation: empty-in 0.6s cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+}
+.dag-empty > *:nth-child(2) { animation-delay: 0.1s; }
+.dag-empty > *:nth-child(3) { animation-delay: 0.2s; }
+@keyframes empty-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .dag-empty__doodle {
   font-size: 46px;
   transform: rotate(-8deg);
   opacity: 0.8;
+  transform-origin: 50% 85%;
+  animation: empty-in 0.6s cubic-bezier(0.2, 0.85, 0.3, 1) backwards,
+    doodle-sway 4.2s ease-in-out 0.6s infinite;
+}
+/* an idle crayon rocking on the blank page, waiting to be picked up */
+@keyframes doodle-sway {
+  0%, 100% { transform: rotate(-8deg) translateY(0); }
+  25% { transform: rotate(4deg) translateY(-4px); }
+  55% { transform: rotate(-14deg) translateY(0); }
+  78% { transform: rotate(-3deg) translateY(-2px); }
 }
 .dag-empty__title {
   font-family: var(--font-display);
@@ -306,7 +608,13 @@ body {
   border-radius: 6px;
 }
 
-/* ---------- task node (crayon sticky) ---------- */
+/* ---------- task node (a doodled sticker) ----------
+   Doodle mode: every outline is drawn twice (the classic sketch double-stroke),
+   wobbles hard, and BOILS — the three reseeded #crayon filters flip on a
+   steps(1) loop so every line redraws itself ~2fps, phase-staggered per node
+   via --i so the flicker never syncs across the graph. Each sticker also sits
+   at its own slight tilt (--tilt, set from paint order in TSX) — `rotate` is
+   the independent CSS property, so hover/entrance transforms compose with it. */
 .task-node {
   position: relative;
   width: 210px;
@@ -317,37 +625,84 @@ body {
   justify-content: center;
   gap: 7px;
   background: var(--wash, var(--paper));
-  border-radius: 16px 13px 17px 12px;
+  border-radius: 17px 12px 18px 11px;
   cursor: pointer;
+  rotate: var(--tilt, 0deg);
   box-shadow: var(--shadow-soft);
-  transition: transform 0.12s ease;
+  transition: transform 0.16s cubic-bezier(0.3, 1.2, 0.5, 1), box-shadow 0.16s ease,
+    opacity 0.3s ease;
 }
 .task-node:hover {
-  transform: translateY(-2px) rotate(-0.4deg);
+  transform: translateY(-3px) rotate(-1deg);
+  box-shadow: 0 13px 26px rgba(74, 71, 84, 0.16);
 }
-/* the hand-drawn wobbly border lives on ::before so text stays crisp */
+.task-node:active {
+  transform: translateY(-1px) rotate(0.4deg) scale(0.985);
+}
+/* first stroke: bold ink outline. Lives on ::before so text stays crisp. */
 .task-node::before {
   content: "";
   position: absolute;
-  inset: -1px;
+  inset: -1.5px;
   border-radius: inherit;
-  border: 3px solid var(--crayon, var(--ink-soft));
+  border: 3.5px solid var(--crayon-ink, var(--crayon, var(--ink-soft)));
   filter: url(#crayon);
   pointer-events: none;
+  transition: border-width 0.15s ease;
+  animation: crayon-boil 0.55s steps(1, end) infinite;
+  animation-delay: calc(var(--i, 0) * -0.13s);
+}
+/* second stroke: the lighter "went over it again" line, offset and reseeded,
+   boiling out of phase with the first so the two never move together */
+.task-node::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--crayon, var(--ink-soft));
+  opacity: 0.5;
+  filter: url(#crayon-b);
+  transform: rotate(0.5deg);
+  pointer-events: none;
+  animation: crayon-boil 0.55s steps(1, end) infinite;
+  animation-delay: calc(var(--i, 0) * -0.13s - 0.28s);
+}
+@keyframes crayon-boil {
+  0% { filter: url(#crayon); }
+  33% { filter: url(#crayon-b); }
+  66% { filter: url(#crayon-c); }
 }
 .task-node--selected {
-  transform: translateY(-2px) rotate(-0.4deg);
+  transform: translateY(-2px);
 }
 .task-node--selected::before {
-  border-width: 3.5px;
+  border-width: 4px;
 }
-.task-node--selected::after {
-  content: "📌";
+/* selection: circled with a fat red marker, drawn in one gesture. The path
+   carries pathLength=100 so the dash draw needs no measured length. */
+.task-node__lasso {
   position: absolute;
-  top: -14px;
-  right: -6px;
-  font-size: 18px;
-  transform: rotate(12deg);
+  inset: -13px -11px;
+  width: calc(100% + 22px);
+  height: calc(100% + 26px);
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+  filter: url(#crayon);
+  animation: crayon-boil 0.55s steps(1, end) infinite;
+}
+.task-node__lasso path {
+  fill: none;
+  stroke: var(--coral);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  opacity: 0.85;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: lasso-draw 0.4s cubic-bezier(0.5, 0.05, 0.4, 1) forwards;
+}
+@keyframes lasso-draw {
+  to { stroke-dashoffset: 0; }
 }
 .task-node__title {
   font-family: var(--font-display);
@@ -384,27 +739,40 @@ body {
   color: var(--ink-soft);
   background: var(--paper);
   border: 1.5px solid var(--line-strong);
-  border-radius: 8px 6px 8px 6px;
+  border-radius: 9px 5px 10px 5px;
   padding: 1px 7px;
+  rotate: -1.5deg;
+  transition: transform 0.18s cubic-bezier(0.3, 1.5, 0.5, 1), color 0.18s ease,
+    border-color 0.18s ease;
+}
+.task-node:hover .task-node__harness {
+  transform: rotate(-2.5deg) scale(1.06);
+  color: var(--ink);
+  border-color: var(--ink-soft);
 }
 .dot {
   display: inline-block;
 }
 
-/* ---------- in-progress: crayon colours the box in ----------
-   A diagonal crayon hatch that fills the node from the bottom up, over and
-   over, while the task is `dispatched` (running). Sits behind the text. */
+/* ---------- in-progress: crayon scribbles the box in ----------
+   Diagonal crayon hatch revealed by a soft-edged mask that sweeps from the
+   top-left corner to the bottom-right — like scribbling the colour on with a
+   crayon, stroke after stroke — while the task is `dispatched`. The mask is
+   3.4× the node size with a hard-ish gradient stop; sliding its position from
+   100%,100% (only the transparent tail over the node) to 0%,0% (fully opaque
+   head) moves the colour front diagonally across the box. */
 .task-node__fill {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   z-index: 0;
-  opacity: 0;
+  /* every sticker is lightly coloured in — flat fills read as software */
+  opacity: 0.16;
   pointer-events: none;
   background-image: repeating-linear-gradient(
     48deg,
-    color-mix(in srgb, var(--crayon, #d98a3d) 62%, transparent) 0 2.6px,
-    transparent 2.6px 6.5px
+    color-mix(in srgb, var(--crayon, #d98a3d) 70%, transparent) 0 3.4px,
+    transparent 3.4px 7.5px
   );
   filter: url(#crayon);
 }
@@ -413,26 +781,231 @@ body {
   position: relative;
   z-index: 1;
 }
+/* dispatched: the crayon front sweeps the box in, stroke after stroke */
 .task-node[data-status="dispatched"] .task-node__fill {
-  animation: crayon-fill 1.7s ease-in-out infinite;
+  -webkit-mask-image: linear-gradient(135deg, #000 40%, transparent 60%);
+  mask-image: linear-gradient(135deg, #000 40%, transparent 60%);
+  -webkit-mask-size: 340% 340%;
+  mask-size: 340% 340%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 100%;
+  mask-position: 100% 100%;
+  animation: crayon-scribble 1.7s ease-in-out infinite;
 }
-@keyframes crayon-fill {
+@keyframes crayon-scribble {
   0% {
-    opacity: 0;
-    clip-path: inset(100% 0 0 0);
+    opacity: 0.1;
+    -webkit-mask-position: 100% 100%;
+    mask-position: 100% 100%;
   }
-  18% {
-    opacity: 0.85;
+  12% {
+    opacity: 0.95;
   }
-  62%,
-  82% {
-    opacity: 0.85;
-    clip-path: inset(0 0 0 0);
+  58% {
+    opacity: 0.95;
+    -webkit-mask-position: 0% 0%;
+    mask-position: 0% 0%;
+  }
+  78% {
+    opacity: 0.95;
+    -webkit-mask-position: 0% 0%;
+    mask-position: 0% 0%;
   }
   100% {
-    opacity: 0;
-    clip-path: inset(0 0 0 0);
+    opacity: 0.1;
+    -webkit-mask-position: 0% 0%;
+    mask-position: 0% 0%;
   }
+}
+
+/* ---------- per-status character ----------------------------------------
+   Every state gets its own hand: waiting is faint, ready breathes, running
+   boils, blocked is hatched shut, done and failed are signed off by hand.
+   ------------------------------------------------------------------------ */
+
+/* pending — pencilled in lightly, not yet committed to (but still legible
+   from across the room — this is a doodle, not a ghost) */
+.task-node[data-status="pending"] {
+  opacity: 0.88;
+}
+.task-node[data-status="pending"]:hover {
+  opacity: 1;
+}
+
+/* ready — a dashed ring breathing just outside the card: "pick me next" */
+.task-node__aura {
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.task-node[data-status="ready"] .task-node__aura {
+  border: 2.5px dashed color-mix(in srgb, var(--crayon) 75%, transparent);
+  animation: ready-breathe 2.5s ease-in-out infinite;
+}
+@keyframes ready-breathe {
+  0%, 100% { transform: scale(0.985); opacity: 0.25; }
+  50% { transform: scale(1.035); opacity: 0.75; }
+}
+
+/* dispatched — a ring pushed outward on every stroke, plus the outline itself
+   redrawing a few times a second (the classic hand-animation "boil") */
+.task-node[data-status="dispatched"] .task-node__aura {
+  inset: -6px;
+  border: 3px solid color-mix(in srgb, var(--crayon) 60%, transparent);
+  animation: run-ring 1.9s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+@keyframes run-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  100% { transform: scale(1.14); opacity: 0; }
+}
+/* a running node boils harder than the idle graph around it */
+.task-node[data-status="dispatched"]::before,
+.task-node[data-status="dispatched"]::after {
+  animation-duration: 0.32s;
+}
+.task-node[data-status="dispatched"] .task-node__status .dot {
+  animation: dot-throb 1.15s ease-in-out infinite;
+}
+@keyframes dot-throb {
+  0%, 100% { transform: scale(0.82); opacity: 0.6; }
+  50% { transform: scale(1.25); opacity: 1; }
+}
+
+/* blocked — the box is cross-hatched shut with a dense crayon grid */
+.task-node[data-status="blocked"] .task-node__fill {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(
+      -42deg,
+      color-mix(in srgb, var(--crayon) 60%, transparent) 0 2.4px,
+      transparent 2.4px 8px
+    ),
+    repeating-linear-gradient(
+      44deg,
+      color-mix(in srgb, var(--crayon) 35%, transparent) 0 2px,
+      transparent 2px 10px
+    );
+}
+
+/* failed — angrily scribbled over in its own coral, denser than blocked */
+.task-node[data-status="failed"] .task-node__fill {
+  opacity: 0.34;
+  background-image: repeating-linear-gradient(
+      -38deg,
+      color-mix(in srgb, var(--crayon) 65%, transparent) 0 2.4px,
+      transparent 2.4px 6px
+    ),
+    repeating-linear-gradient(
+      51deg,
+      color-mix(in srgb, var(--crayon) 40%, transparent) 0 2px,
+      transparent 2px 9px
+    );
+}
+
+/* completed / failed — a tick or a scribbled cross signed into the corner,
+   drawn stroke-first then settling */
+.task-node__stamp {
+  position: absolute;
+  right: -12px;
+  bottom: -13px;
+  width: 46px;
+  height: 36px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+  filter: url(#crayon);
+}
+.task-node__stamp path {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+  animation: stamp-draw 0.5s cubic-bezier(0.5, 0, 0.35, 1) forwards;
+}
+.task-node__stamp--ok path {
+  stroke: #4d9e62;
+}
+.task-node__stamp--bad path {
+  stroke: #cf4a3c;
+}
+/* the cross's second stroke lands a beat after the first */
+.task-node__stamp--bad path:nth-child(2) {
+  animation-delay: 0.16s;
+}
+@keyframes stamp-draw {
+  from { stroke-dashoffset: 90; }
+  to { stroke-dashoffset: 0; }
+}
+/* done work presses flat onto the page — less lift than live work */
+.task-node[data-status="completed"] {
+  box-shadow: 0 3px 10px rgba(74, 71, 84, 0.07);
+}
+.task-node[data-status="failed"] .task-node__title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--crayon) 65%, transparent);
+  text-decoration-thickness: 2px;
+}
+
+/* ---------- the moment a status flips ---------- */
+/* a ring flicked outward from the card, once, on the poll that changed it */
+.task-node__ripple {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 3px solid var(--crayon, var(--ink-soft));
+  pointer-events: none;
+  animation: status-ripple 0.85s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+@keyframes status-ripple {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+/* ...and the outline is re-inked, pressed harder for a beat. Excluded for
+   running nodes so it can't stomp the boil loop (same specificity, and this
+   rule comes later in the file). */
+.task-node--pop:not([data-status="dispatched"])::before {
+  /* both: the press-harder flash AND the ever-running boil, so the outline
+     doesn't freeze mid-flick while the pop plays out */
+  animation: crayon-restate 0.55s ease-out,
+    crayon-boil 0.55s steps(1, end) infinite;
+}
+@keyframes crayon-restate {
+  0% { border-width: 3.5px; }
+  35% { border-width: 7px; }
+  100% { border-width: 3.5px; }
+}
+
+/* crayon sparks flicked off the corner the moment a task lands done */
+.task-node__sparks {
+  position: absolute;
+  top: -30px;
+  right: -26px;
+  width: 58px;
+  height: 58px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 3;
+  filter: url(#crayon);
+  transform-origin: 30% 80%;
+  animation: sparks-burst 0.8s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+.task-node__sparks path {
+  fill: none;
+  stroke: var(--butter);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+.task-node__sparks path:nth-child(2n) {
+  stroke: var(--meadow);
+}
+@keyframes sparks-burst {
+  0% { opacity: 0; transform: scale(0.3) rotate(-14deg); }
+  25% { opacity: 1; transform: scale(1.05) rotate(3deg); }
+  70% { opacity: 1; transform: scale(1.12) rotate(0deg); }
+  100% { opacity: 0; transform: scale(1.2) rotate(4deg); }
 }
 
 /* react-flow handles: quiet little anchor dots */
@@ -442,45 +1015,134 @@ body {
   background: var(--paper);
   border: 1.5px solid var(--line-strong);
 }
-/* pencil edges — a thin round-capped stroke. No displacement filter: a
-   perfectly horizontal edge (the common LR case) has a zero-height bounding
-   box, and an objectBoundingBox filter region collapses to nothing there,
-   which would make the edge invisible. */
+/* pencil edges — every dependency is a scrawled line, not a bezier. The
+   #pencil-edge filters are userSpaceOnUse (a zero-height horizontal bbox would
+   collapse an objectBoundingBox filter), and all three seeds flip on a steps()
+   loop so the whole web of lines boils like a pencil test. The filter wraps the
+   path's full rendering, so the arrowhead markers wobble along with the line. */
 .react-flow__edge-path {
-  stroke: #8f8672;
-  stroke-width: 2.6;
+  stroke: #6f6757;
+  stroke-width: 3.2;
   stroke-linecap: round;
+  filter: url(#pencil-edge);
+  animation: edge-boil 0.6s steps(1, end) infinite;
+  transition: stroke 0.4s ease, stroke-width 0.3s ease, opacity 0.3s ease;
+}
+/* neighbouring edges flick out of phase */
+.react-flow__edge:nth-child(2n) .react-flow__edge-path {
+  animation-delay: -0.2s;
+}
+.react-flow__edge:nth-child(3n) .react-flow__edge-path {
+  animation-delay: -0.4s;
+}
+@keyframes edge-boil {
+  0% { filter: url(#pencil-edge); }
+  33% { filter: url(#pencil-edge-b); }
+  66% { filter: url(#pencil-edge-c); }
 }
 .react-flow__arrowhead {
-  fill: #8f8672;
+  fill: #6f6757;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--sky);
 }
-/* execution: pencil-draws the link out of the running node toward the next,
-   fading in from transparent then wiping the stroke on from source to target.
-   dasharray is larger than any realistic edge so offset maps to "how much of
-   the line is drawn yet". */
-.react-flow__edge.edge-active .react-flow__edge-path {
-  stroke-dasharray: 1200;
-  animation: pencil-draw 1.5s ease-in-out infinite;
+/* a dependency not yet reached stays lighter, but still clearly a drawn line */
+.react-flow__edge.edge--idle .react-flow__edge-path {
+  opacity: 0.68;
+  stroke-width: 3;
 }
-@keyframes pencil-draw {
+/* a satisfied dependency gets inked in green — and presses down once, hard, on
+   the poll where its upstream node completed. (A dash-offset "draw" would need
+   the path length, which varies per edge; a press-on flash reads the same and
+   works at any length.) */
+.react-flow__edge.edge--done .react-flow__edge-path {
+  stroke: #4f9e5d;
+  stroke-width: 3.4;
+  animation: edge-ink 0.65s cubic-bezier(0.3, 0.9, 0.35, 1),
+    edge-boil 0.6s steps(1, end) infinite;
+}
+@keyframes edge-ink {
+  0% { stroke: #6f6757; stroke-width: 2.6; }
+  40% { stroke: #3c8a4a; stroke-width: 5.5; }
+  100% { stroke: #4f9e5d; stroke-width: 3.4; }
+}
+/* hovering an edge lifts it out of the tangle */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 4.2;
+  opacity: 1;
+}
+/* execution: an edge leaving a running node is first a faint dashed pencil
+   sketch, then a solid pencil stroke traces over it from source to target,
+   over and over. Both strokes wobble via the #pencil-edge filter — defined
+   with filterUnits="userSpaceOnUse" so a perfectly horizontal edge (zero-height
+   bounding box) doesn't collapse the filter region to nothing. */
+.pencil-edge {
+  filter: url(#pencil-edge);
+  animation: edge-boil 0.45s steps(1, end) infinite;
+}
+.pencil-edge__sketch {
+  stroke: #8f8672;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 8.5;
+  opacity: 0.55;
+  animation: sketch-crawl 3.2s linear infinite;
+}
+/* dashes drift slowly downstream — the sketch is alive, not static */
+@keyframes sketch-crawl {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+.pencil-edge__draw {
+  stroke: #4a4231;
+  stroke-width: 3.8;
+  stroke-linecap: round;
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: pencil-trace 2.6s cubic-bezier(0.45, 0.05, 0.35, 1) infinite;
+}
+/* pencil press-on: the line darkens and thickens slightly as it's drawn,
+   holds, then lifts so the next pass can start from the source again */
+@keyframes pencil-trace {
   0% {
     stroke-dashoffset: 1200;
-    opacity: 0.12;
-  }
-  22% {
+    stroke-width: 3.2;
     opacity: 0.95;
   }
-  75% {
+  52% {
     stroke-dashoffset: 0;
+    stroke-width: 4;
+    opacity: 0.95;
+  }
+  74% {
+    stroke-dashoffset: 0;
+    stroke-width: 3.8;
     opacity: 0.95;
   }
   100% {
     stroke-dashoffset: 0;
+    stroke-width: 3.8;
     opacity: 0;
   }
+}
+/* the crayon tip itself, riding the path in step with the stroke it lays down
+   (motion comes from <animateMotion>; this is just how the nub looks) */
+.pencil-edge__nub {
+  fill: var(--butter);
+  stroke: #b37f16;
+  stroke-width: 1.6;
+  filter: drop-shadow(0 1.5px 2.5px rgba(74, 71, 84, 0.32));
+  animation: nub-lift 2.6s linear infinite;
+}
+/* animate `r`, not `transform` — <animateMotion> owns this element's transform
+   and the two would fight */
+@keyframes nub-lift {
+  0% { opacity: 0; r: 2.4; }
+  6% { opacity: 1; r: 4.4; }
+  52% { opacity: 1; r: 4.4; }
+  74% { opacity: 0.9; r: 5.4; }
+  90%, 100% { opacity: 0; r: 2.8; }
 }
 
 /* ---------- gates (a pinned note) ---------- */
@@ -508,6 +1170,39 @@ body {
   padding: 14px 16px 14px;
   box-shadow: var(--shadow-sticker);
   transform: rotate(-0.6deg);
+  /* pinned to the board, then nudged every few seconds until someone deals
+     with it — a blocked run shouldn't be easy to miss */
+  animation: gate-pin 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) backwards,
+    gate-nudge 5s ease-in-out 1.4s infinite;
+}
+@keyframes gate-pin {
+  0% { opacity: 0; transform: rotate(-7deg) translateY(-22px) scale(1.06); }
+  60% { opacity: 1; transform: rotate(1.5deg) translateY(3px) scale(1); }
+  100% { opacity: 1; transform: rotate(-0.6deg) translateY(0) scale(1); }
+}
+@keyframes gate-nudge {
+  0%, 88%, 100% { transform: rotate(-0.6deg); }
+  91% { transform: rotate(-2.4deg) translateX(-3px); }
+  94% { transform: rotate(1.6deg) translateX(3px); }
+  97% { transform: rotate(-1.2deg) translateX(-1px); }
+}
+.gate:hover {
+  animation-play-state: running, paused;
+}
+/* a soft lilac halo pulsing behind the card */
+.gate::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 2.5px solid var(--lilac);
+  opacity: 0;
+  pointer-events: none;
+  animation: gate-halo 2.4s ease-out infinite;
+}
+@keyframes gate-halo {
+  0% { transform: scale(0.97); opacity: 0.55; }
+  70%, 100% { transform: scale(1.06); opacity: 0; }
 }
 .gate::before {
   content: "📍";
@@ -516,6 +1211,7 @@ body {
   left: 16px;
   font-size: 20px;
   transform: rotate(-10deg);
+  z-index: 1;
 }
 .gate__badge {
   font-family: var(--font-display);
@@ -523,6 +1219,16 @@ body {
   color: #7b5cb8;
   letter-spacing: 0.5px;
   margin-bottom: 7px;
+}
+.gate__badge::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dot-throb 1.3s ease-in-out infinite;
 }
 .gate__question {
   font-size: 14px;
@@ -575,6 +1281,25 @@ body {
   background: rgba(240, 185, 78, 0.35);
   border: 1px dashed rgba(179, 127, 22, 0.4);
   border-radius: 3px;
+  transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1), background 0.3s ease;
+}
+.node-panel:hover::before {
+  transform: translateX(-50%) rotate(2.5deg) scaleX(1.08);
+  background: rgba(240, 185, 78, 0.5);
+}
+/* the card's contents drop in one line at a time, like it's being written */
+.node-panel > * {
+  animation: panel-row-in 0.32s cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+}
+.node-panel > *:nth-child(2) { animation-delay: 0.05s; }
+.node-panel > *:nth-child(3) { animation-delay: 0.1s; }
+.node-panel > *:nth-child(4) { animation-delay: 0.15s; }
+.node-panel > *:nth-child(5) { animation-delay: 0.2s; }
+.node-panel > *:nth-child(6) { animation-delay: 0.25s; }
+.node-panel > *:nth-child(n + 7) { animation-delay: 0.3s; }
+@keyframes panel-row-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .node-panel__close {
   position: absolute;
@@ -585,9 +1310,12 @@ body {
   color: var(--ink-soft);
   cursor: pointer;
   font-size: 15px;
+  line-height: 1;
+  transition: color 0.15s ease, transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1);
 }
 .node-panel__close:hover {
-  color: var(--ink);
+  color: var(--coral);
+  transform: rotate(90deg) scale(1.2);
 }
 .node-panel__status {
   display: flex;
@@ -706,10 +1434,21 @@ body {
   border: 2px solid var(--line-strong);
   background: var(--paper);
   color: var(--ink);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.exec__select:hover:not(:disabled),
+.exec__custom:hover:not(:disabled),
+.exec__num:hover:not(:disabled) {
+  border-color: var(--ink-soft);
 }
 .exec__custom {
   width: 100px;
   font-family: "Fredoka", ui-monospace, monospace;
+  animation: field-unfold 0.25s cubic-bezier(0.2, 1, 0.3, 1);
+}
+@keyframes field-unfold {
+  from { opacity: 0; width: 0; padding-left: 0; padding-right: 0; }
+  to { opacity: 1; width: 100px; }
 }
 .exec__num {
   width: 52px;
@@ -719,6 +1458,8 @@ body {
 .exec__num:focus {
   outline: none;
   border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+  transform: translateY(-1px);
 }
 .exec__live {
   display: flex;
@@ -744,12 +1485,43 @@ body {
   0%, 100% { opacity: 0.35; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1.1); }
 }
+/* one bead per busy worker, each breathing out of phase — the pool at a glance */
+.exec__beads {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+}
+.exec__beads i {
+  width: 5px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--butter);
+  animation: bead-bob 0.95s ease-in-out infinite;
+}
+@keyframes bead-bob {
+  0%, 100% { transform: scaleY(0.5); opacity: 0.45; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
 .btn--run {
   background: var(--meadow);
   color: #fff;
   border-color: #4f9e5d;
   padding: 7px 18px;
   font-size: 13.5px;
+}
+/* work is sitting ready and nobody has pressed Run — tap the user on the
+   shoulder every few seconds, then get out of the way on hover */
+.btn--attract {
+  animation: run-attract 4s ease-in-out 1s infinite;
+}
+.btn--attract:hover {
+  animation: none;
+}
+@keyframes run-attract {
+  0%, 78%, 100% { transform: translate(0, 0) rotate(0); box-shadow: var(--shadow-sticker); }
+  82% { transform: translate(-1px, -3px) rotate(-2deg); box-shadow: 5px 6px 0 rgba(74, 71, 84, 0.2); }
+  87% { transform: translate(1px, -1px) rotate(1.6deg); }
+  92% { transform: translate(-1px, -2px) rotate(-1deg); }
 }
 .btn--stop-run {
   background: var(--coral);
@@ -762,6 +1534,14 @@ body {
   font-size: 12px;
   color: var(--coral);
   max-width: 260px;
+  animation: err-jolt 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes err-jolt {
+  0% { opacity: 0; transform: translateX(0); }
+  25% { opacity: 1; transform: translateX(-5px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
 }
 .node-panel__result {
   margin: 0;
@@ -780,19 +1560,32 @@ body {
 
 /* ---------- react-flow chrome ---------- */
 .react-flow__controls {
-  border-radius: 12px;
+  border-radius: 13px 11px 13px 10px;
   overflow: hidden;
   box-shadow: var(--shadow-soft);
   border: 2px solid var(--line-strong);
+  animation: panel-in 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) 0.2s backwards;
 }
 .react-flow__controls button {
   background: var(--paper);
   border-bottom: 1.5px solid var(--line);
   fill: var(--ink);
   color: var(--ink);
+  transition: background 0.15s ease, transform 0.15s cubic-bezier(0.3, 1.5, 0.5, 1);
 }
 .react-flow__controls button:hover {
-  background: var(--paper-2);
+  background: var(--sky-wash);
+  transform: scale(1.12);
+}
+.react-flow__controls button:active {
+  transform: scale(0.94);
+}
+/* the anchor dot on a running node's outgoing side glows with the stroke */
+.task-node[data-status="dispatched"] .react-flow__handle-right,
+.task-node[data-status="dispatched"] .react-flow__handle-bottom {
+  border-color: var(--butter);
+  background: var(--butter);
+  animation: dot-throb 1.15s ease-in-out infinite;
 }
 .react-flow__attribution {
   display: none;
@@ -803,18 +1596,24 @@ body {
    ============================================================ */
 /* `backwards` (not `forwards`) so the held end-state doesn't override the
    node's :hover lift once the entrance finishes. Plays once per node — React
-   Flow reuses the DOM node across status polls, so it won't replay. */
+   Flow reuses the DOM node across status polls, so it won't replay.
+   `--i` is the node's paint order, so the graph draws itself in sequence
+   rather than all at once; capped so a 50-node DAG doesn't crawl. */
 .task-node {
-  animation: node-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards;
+  animation: node-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+  animation-delay: min(calc(var(--i, 0) * 55ms), 900ms);
 }
 @keyframes node-in {
   from {
     opacity: 0;
-    transform: scale(0.55);
+    transform: scale(0.3) rotate(-11deg);
+  }
+  60% {
+    transform: scale(1.07) rotate(2.5deg);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) rotate(0);
   }
 }
 .node-panel {
@@ -842,4 +1641,127 @@ body {
     transition: none !important;
     animation: none !important;
   }
+  /* a few animations do real work — they reveal something rather than just
+     decorate it. Without them running, hand the end state over directly. */
+  .task-node__stamp path,
+  .task-node__lasso path {
+    stroke-dashoffset: 0;
+  }
+  /* the sparks are pure celebration; still, they'd otherwise freeze mid-air */
+  .task-node__sparks {
+    display: none;
+  }
+  .topbar__title::after,
+  .seg button.active::after {
+    transform: none;
+  }
+  .exec__custom {
+    width: 100px;
+  }
+  /* purely kinetic flourishes have nothing to show when still */
+  .task-node__ripple,
+  .task-node[data-status="dispatched"] .task-node__aura,
+  .gate::after {
+    display: none;
+  }
+  /* the ready ring is a real signal, so keep it — just stop it breathing */
+  .task-node[data-status="ready"] .task-node__aura {
+    opacity: 0.5;
+  }
+}
+
+/* --- Run picker (doodle-styled like everything else) --------------------- */
+/* Tasks are Run-scoped since Orca 1.4.160, so the topbar always names the Run
+   whose DAG is on screen. */
+.runpick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runpick__select {
+  max-width: 220px;
+  padding: 6px 9px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 12px 9px 13px 8px;
+  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.runpick__select:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+  transform: translateY(-1px) rotate(-0.4deg);
+}
+.runpick__select:focus {
+  outline: none;
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+.runpick__select:disabled {
+  color: var(--ink-soft);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Retry counter next to the running indicator: Orca circuit-breaks a task after
+   3 consecutive failed attempts, so a non-zero count is worth surfacing early. */
+.exec__retry {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: #b37f16;
+  background: #fdf4e1;
+  border: 1.5px solid var(--butter);
+  border-radius: 8px 6px 9px 5px;
+  animation: err-jolt 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* Empty state when no Run is selected yet — a note doodled on the page. */
+.empty-run {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 430px;
+  padding: 22px 26px;
+  text-align: center;
+  background: var(--paper);
+  border-radius: 18px 14px 19px 13px;
+  box-shadow: var(--shadow-sticker);
+  transform: translate(-50%, -50%) rotate(-0.8deg);
+  z-index: 5;
+  animation: gate-pin 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) backwards;
+}
+.empty-run::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 3px dashed var(--line-strong);
+  filter: url(#crayon);
+  pointer-events: none;
+}
+.empty-run__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+}
+.empty-run__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.empty-run__body code {
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--sky-ink);
+  background: var(--sky-wash);
+  padding: 1px 6px;
+  border-radius: 6px;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDefaultHarness, getNodeHarness, setNodeHarness } from "../harness";
+import { getDefaultHarness, getNodeHarness, setNodeHarness, useConfig } from "../harness";
 import { HARNESSES, STATUS_META, type DagNode } from "../types";
 
 const INHERIT = "__inherit__";
@@ -13,6 +13,7 @@ const KNOWN = HARNESSES as readonly string[];
  */
 export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => void }) {
   const meta = STATUS_META[node.status];
+  useConfig(); // re-render when the default harness (or this node's) changes
   const stored = getNodeHarness(node.id);
   const [sel, setSel] = useState(stored === null ? INHERIT : KNOWN.includes(stored) ? stored : CUSTOM);
   const [custom, setCustom] = useState(stored && !KNOWN.includes(stored) ? stored : "");
@@ -68,6 +69,23 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
           />
         )}
       </div>
+
+      {/* Orca tracks the running attempt as a Dispatch; task-list only carries
+          these while the task is dispatched. */}
+      {node.dispatchId && (
+        <div className="node-panel__field">
+          <span className="node-panel__key">当前 Dispatch（本次尝试）</span>
+          <div className="node-panel__id">
+            <code>{node.dispatchId}</code>
+          </div>
+          {node.assigneeHandle && (
+            <span className="node-panel__hint">
+              执行终端 <code>{node.assigneeHandle}</code> · 用{" "}
+              <code>orca orchestration worker-read --dispatch {node.dispatchId}</code> 看输出
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="node-panel__field">
         <span className="node-panel__key">描述 / spec</span>

@@ -1,46 +1,82 @@
-import { closeTerminal, dispatchTask, listTasks, spawnWorker } from "./orca";
+import {
+  OrcaCliError,
+  bindRun,
+  closeTerminal,
+  ensureCoordinatorTerminal,
+  listTasks,
+  showDispatch,
+  startLegacyWorker,
+  startSupervisedWorker,
+  stopSupervisedWorker,
+  type OrcaTask,
+  type StartedWorker,
+} from "./orca";
 
 /**
  * Self-driven coordinator.
  *
- * `orca orchestration run` does not actually dispatch (verified), so the viewer
- * IS the coordinator: a loop that polls the DAG, dispatches every `ready` task
- * to a worker of that task's chosen harness, and advances as workers report
- * `worker_done`. Parallelism is driven by the DAG — all currently-ready tasks
- * run at once, up to `maxConcurrency` — not by a manual worker count.
+ * Orca ships no scheduler on purpose — `orchestration run` / `coordinator-start`
+ * are retired and the current skill states plainly that "agents still choose
+ * placement and concurrency; Orca does not schedule workers". So the viewer
+ * remains the thing that walks the DAG: each tick it finds every `ready` task
+ * and starts a worker for it, up to a concurrency cap.
  *
- * Workers are reused: an idle worker of the right harness takes the next task;
- * otherwise a new one is spawned. When the run ends, spawned workers are closed.
+ * What changed in Orca 1.4.160 is everything *below* that loop. We no longer
+ * hand-roll terminal creation, TUI readiness and dispatch, and we no longer
+ * keep our own worker table: `worker-start` composes the whole thing and hands
+ * back a Dispatch, which is Orca's own record of "one attempt of one task" —
+ * complete with failure_count, heartbeats and stop/abandon semantics.
+ *
+ * Authority: mutations require a live Orca terminal bound to the Run, so the
+ * coordinator owns one (`ensureCoordinatorTerminal`) and binds it on start.
+ * That fences whoever was bound before — see `startCoordinator`.
  */
 
-interface Worker {
-  handle: string;
+/** One in-flight attempt, mirroring the Orca Dispatch we started. */
+interface Attempt {
+  taskId: string;
   harness: string;
-  taskId: string | null; // the task currently assigned to this worker, if any
+  mode: StartedWorker["mode"];
+  dispatchId: string | null;
+  /** Worker terminal, only when we created it on the legacy path. */
+  handle: string | null;
+  /** Live from `worker-show`, for the UI. */
+  failureCount: number;
+  lastHeartbeatAt: string | null;
 }
 
 interface StartOpts {
+  runId: string;
   harnessByTask: Record<string, string>;
   defaultHarness: string;
   maxConcurrency: number;
+  /** Worktree the coordinator terminal (and therefore `current` workers) lives in. */
+  worktree: string;
 }
 
 interface State {
   running: boolean;
+  /** Set once the coordinator terminal is bound; null while starting. */
+  runId: string | null;
+  coordinatorHandle: string | null;
   opts: StartOpts | null;
-  workers: Worker[];
+  attempts: Map<string, Attempt>;
   startedAt: number;
   error: string | null;
   lastTick: number;
 }
 
 const POLL_MS = 3500;
-const TERMINAL = new Set(["completed", "failed"]);
+const TERMINAL_STATUS = new Set(["completed", "failed"]);
+/** Orca rejects these agents for `worker-start`; retry them the legacy way. */
+const UNCONFIGURED_AGENT_CODES = new Set(["agent_unconfigured", "invalid_argument"]);
 
 const state: State = {
   running: false,
+  runId: null,
+  coordinatorHandle: null,
   opts: null,
-  workers: [],
+  attempts: new Map(),
   startedAt: 0,
   error: null,
   lastTick: 0,
@@ -49,30 +85,83 @@ const state: State = {
 export function coordinatorStatus() {
   return {
     running: state.running,
+    runId: state.runId,
+    coordinatorHandle: state.coordinatorHandle,
     error: state.error,
     startedAt: state.startedAt,
-    workers: state.workers.map((w) => ({ handle: w.handle, harness: w.harness, taskId: w.taskId })),
-    busy: state.workers.filter((w) => w.taskId).length,
+    lastTick: state.lastTick,
+    attempts: [...state.attempts.values()].map((a) => ({
+      taskId: a.taskId,
+      harness: a.harness,
+      mode: a.mode,
+      dispatchId: a.dispatchId,
+      handle: a.handle,
+      failureCount: a.failureCount,
+      lastHeartbeatAt: a.lastHeartbeatAt,
+    })),
+    busy: state.attempts.size,
   };
 }
 
-export function startCoordinator(opts: StartOpts): void {
+/**
+ * Bind the Run and start the dispatch loop.
+ *
+ * Binding is the side effect worth knowing about: it fences whatever terminal
+ * was coordinating this Run, so the user's agent terminal will start getting
+ * `consumer_fenced` on its own mutations until it runs `run-use` again.
+ */
+export async function startCoordinator(opts: StartOpts): Promise<void> {
   if (state.running) return;
   state.running = true;
   state.opts = opts;
-  state.workers = [];
+  state.attempts = new Map();
   state.error = null;
+  state.runId = null;
   state.startedAt = Date.now();
+
+  try {
+    const handle = await ensureCoordinatorTerminal(opts.worktree);
+    // The user may have hit stop while we were creating/binding — if so the
+    // stop already ran with no handle to close, so close it here ourselves.
+    if (!state.running) {
+      await closeTerminal(handle);
+      return;
+    }
+    await bindRun(opts.runId, handle);
+    if (!state.running) {
+      await closeTerminal(handle);
+      return;
+    }
+    state.coordinatorHandle = handle;
+    state.runId = opts.runId;
+  } catch (err) {
+    state.running = false;
+    state.error = String((err as Error).message ?? err);
+    throw err;
+  }
+
   void loop();
 }
 
+/** Stop the loop and tear down everything we started. */
 export async function stopCoordinator(closeWorkers = true): Promise<void> {
   state.running = false;
-  const workers = state.workers.slice();
-  state.workers = [];
-  if (closeWorkers) {
-    await Promise.all(workers.map((w) => closeTerminal(w.handle)));
-  }
+  const attempts = [...state.attempts.values()];
+  const coordinator = state.coordinatorHandle;
+  state.attempts = new Map();
+  state.coordinatorHandle = null;
+
+  if (!closeWorkers) return;
+
+  await Promise.all(
+    attempts.map(async (a) => {
+      if (a.dispatchId) await stopSupervisedWorker(a.dispatchId);
+      else if (a.handle) await closeTerminal(a.handle);
+    }),
+  );
+  // Release our claim on the Run: with the pane gone, the user's agent can
+  // rebind with `orca orchestration run-use --id <run>`.
+  if (coordinator) await closeTerminal(coordinator);
 }
 
 async function loop(): Promise<void> {
@@ -89,52 +178,104 @@ async function loop(): Promise<void> {
 
 async function tick(): Promise<void> {
   const opts = state.opts!;
-  const tasks = await listTasks();
+  const runId = state.runId!;
+  const tasks = await listTasks(runId);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   state.lastTick = Date.now();
 
-  // Free workers whose assigned task has reached a terminal state.
-  for (const w of state.workers) {
-    if (w.taskId) {
-      const t = byId.get(w.taskId);
-      if (!t || TERMINAL.has(t.status)) w.taskId = null;
-    }
+  // Drop attempts whose task reached a terminal state, and refresh the rest
+  // from Orca's own Dispatch record — in parallel, since each worker-show is a
+  // full CLI round-trip and a serial sweep would stretch the tick.
+  for (const [taskId] of [...state.attempts]) {
+    const task = byId.get(taskId);
+    if (!task || TERMINAL_STATUS.has(task.status)) state.attempts.delete(taskId);
   }
+  await Promise.all(
+    [...state.attempts.values()].map(async (attempt) => {
+      const task = byId.get(attempt.taskId);
+      // task-list only carries dispatch_id while dispatched; adopt it so legacy
+      // attempts get a Dispatch identity too.
+      if (!attempt.dispatchId && task?.dispatch_id) attempt.dispatchId = task.dispatch_id;
+      if (!attempt.dispatchId) return;
+      const d = await showDispatch(attempt.dispatchId);
+      if (d) {
+        attempt.failureCount = d.failure_count ?? 0;
+        attempt.lastHeartbeatAt = d.last_heartbeat_at ?? null;
+      }
+    }),
+  );
 
-  // Nothing runnable and nothing in flight → the DAG is done (or stuck). Stop.
-  const inFlight = tasks.filter((t) => t.status === "dispatched").length;
   const ready = tasks.filter((t) => t.status === "ready");
-  if (ready.length === 0 && inFlight === 0) {
+  const inFlight = tasks.filter((t) => t.status === "dispatched").length;
+
+  // Nothing runnable and nothing in flight → the DAG is done (or stuck).
+  if (ready.length === 0 && inFlight === 0 && state.attempts.size === 0) {
     await stopCoordinator(true);
     return;
   }
 
-  // Dispatch ready tasks in parallel, up to the concurrency budget.
-  const budget = Math.max(0, opts.maxConcurrency - state.workers.filter((w) => w.taskId).length);
-  for (const t of ready.slice(0, budget)) {
-    const harness = opts.harnessByTask[t.id] || opts.defaultHarness;
-    let worker = state.workers.find((w) => w.harness === harness && !w.taskId);
-    if (!worker) {
-      // Spawn on demand. Reserve a slot synchronously so we don't over-spawn.
-      worker = { handle: "", harness, taskId: t.id };
-      state.workers.push(worker);
-      try {
-        worker.handle = await spawnWorker(harness);
-      } catch (e) {
-        // spawn failed — drop this reservation and surface the error
-        state.workers = state.workers.filter((w) => w !== worker);
-        state.error = String((e as Error).message ?? e);
-        continue;
-      }
-    } else {
-      worker.taskId = t.id;
-    }
+  const budget = Math.max(0, opts.maxConcurrency - state.attempts.size);
+  const batch = ready.filter((t) => !state.attempts.has(t.id)).slice(0, budget);
+  if (batch.length === 0) return;
+
+  // Reserve every slot synchronously so a slow start can't let the next tick
+  // over-dispatch, then start the batch in parallel.
+  const reserved = batch.map((task) => {
+    const harness = opts.harnessByTask[task.id] || opts.defaultHarness;
+    const attempt: Attempt = {
+      taskId: task.id,
+      harness,
+      mode: "supervised",
+      dispatchId: null,
+      handle: null,
+      failureCount: 0,
+      lastHeartbeatAt: null,
+    };
+    state.attempts.set(task.id, attempt);
+    return { task, attempt };
+  });
+
+  await Promise.all(reserved.map(({ task, attempt }) => startOne(task, attempt, opts, runId)));
+}
+
+async function startOne(
+  task: OrcaTask,
+  attempt: Attempt,
+  opts: StartOpts,
+  runId: string,
+): Promise<void> {
+  const from = state.coordinatorHandle!;
+  try {
+    let started: StartedWorker;
     try {
-      await dispatchTask(t.id, worker.handle);
-    } catch (e) {
-      worker.taskId = null;
-      state.error = String((e as Error).message ?? e);
+      started = await startSupervisedWorker({
+        taskId: task.id,
+        agent: attempt.harness,
+        runId,
+        from,
+        worktree: "current",
+      });
+    } catch (err) {
+      // A harness Orca doesn't know as a configured TUI agent (or a custom
+      // command) can't go through worker-start — compose it by hand instead.
+      const code = (err as OrcaCliError).code;
+      if (!code || !UNCONFIGURED_AGENT_CODES.has(code)) throw err;
+      started = await startLegacyWorker({
+        taskId: task.id,
+        harness: attempt.harness,
+        runId,
+        from,
+        worktree: opts.worktree,
+      });
     }
+    attempt.mode = started.mode;
+    attempt.dispatchId = started.dispatchId;
+    attempt.handle = started.handle;
+  } catch (err) {
+    // Free the slot so the next tick can retry; Orca circuit-breaks the task
+    // itself after 3 consecutive attempt failures.
+    state.attempts.delete(task.id);
+    state.error = `任务 ${task.id} 启动失败：${String((err as Error).message ?? err)}`;
   }
 }
 

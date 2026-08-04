@@ -23,6 +23,10 @@ export interface DagNode {
   result: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** Current Orca Dispatch (one attempt). Only set while dispatched. */
+  dispatchId: string | null;
+  /** Terminal running the current attempt. Only set while dispatched. */
+  assigneeHandle: string | null;
 }
 
 export interface DagEdge {
@@ -41,10 +45,20 @@ export interface Gate {
 }
 
 export interface DagResponse {
+  /** Tasks are Run-scoped since Orca 1.4.160 — a DAG always belongs to one Run. */
+  runId: string;
   nodes: DagNode[];
   edges: DagEdge[];
   gates: Gate[];
   generatedAt: number;
+}
+
+/** A lightweight orchestration Run: namespace + coordinator inbox. */
+export interface OrcaRun {
+  id: string;
+  objective: string;
+  coordinator_handle: string | null;
+  created_at: string;
 }
 
 export interface StatusMeta {
@@ -69,25 +83,63 @@ export const STATUS_META: Record<TaskStatus, StatusMeta> = {
 };
 
 /**
- * Harness presets. A harness is just the agent command launched in a worker
- * terminal — so this list is pure viewer config, not an Orca enum. Each task
- * node picks its own; unset nodes fall back to the global default.
+ * Harness presets. These are Orca TUI agent ids: the coordinator passes one to
+ * `orca orchestration worker-start --agent <id>`, so Orca owns the launcher and
+ * its autonomous flags. Anything Orca doesn't recognize (a custom command) still
+ * works — the coordinator falls back to creating the terminal itself.
  */
-export const HARNESSES = ["claude", "kimi", "opencode", "grok", "codex"] as const;
+export const HARNESSES = [
+  "claude",
+  "codex",
+  "opencode",
+  "gemini",
+  "grok",
+  "cursor",
+  "droid",
+  "kimi",
+] as const;
 export type Harness = (typeof HARNESSES)[number] | (string & {});
 
-/** A worker the coordinator is using, and the task it's currently running. */
-export interface RunWorker {
-  handle: string;
+/**
+ * One in-flight attempt, mirroring an Orca Dispatch. `supervised` attempts were
+ * started by `worker-start` and Orca tracks them; `legacy` ones were composed by
+ * hand for a harness Orca doesn't recognize as a configured TUI agent.
+ */
+export interface RunAttempt {
+  taskId: string;
   harness: string;
-  taskId: string | null;
+  mode: "supervised" | "legacy";
+  dispatchId: string | null;
+  handle: string | null;
+  /** Orca fails the task after 3 consecutive attempt failures. */
+  failureCount: number;
+  lastHeartbeatAt: string | null;
 }
 
 /** Live status of the self-driven coordinator. */
 export interface RunStatus {
   running: boolean;
+  /** The Run this coordinator bound itself to. */
+  runId: string | null;
+  /** The Orca terminal the coordinator borrows for mutating calls. */
+  coordinatorHandle: string | null;
   busy: number;
   error: string | null;
   startedAt: number;
-  workers: RunWorker[];
+  lastTick: number;
+  attempts: RunAttempt[];
+}
+
+/**
+ * Viewer configuration persisted server-side in `.orca-dag.config.json`
+ * (workspace root) — Orca tasks have no metadata field for harness choices,
+ * so the viewer keeps its own store instead of browser localStorage.
+ */
+export interface ViewerConfig {
+  defaultHarness: string;
+  harnessByTask: Record<string, string>;
+  maxConcurrency: number;
+  layout: LayoutKind | "";
+  /** Last Run the user was viewing; restored on reload. */
+  runId: string;
 }
