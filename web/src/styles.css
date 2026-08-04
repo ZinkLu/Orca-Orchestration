@@ -781,41 +781,51 @@ body {
   position: relative;
   z-index: 1;
 }
-/* dispatched: the crayon front sweeps the box in, stroke after stroke */
-.task-node[data-status="dispatched"] .task-node__fill {
-  -webkit-mask-image: linear-gradient(135deg, #000 40%, transparent 60%);
-  mask-image: linear-gradient(135deg, #000 40%, transparent 60%);
-  -webkit-mask-size: 340% 340%;
-  mask-size: 340% 340%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: 100% 100%;
-  mask-position: 100% 100%;
-  animation: crayon-scribble 1.7s ease-in-out infinite;
+
+/* dispatched: a real crayon scrawl, unique per node, draws itself across the
+   box again and again. Two passes: a bold stroke, then a thinner one trailing
+   half a beat behind, like colouring over the same spot twice. */
+.task-node__scribble {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
 }
-@keyframes crayon-scribble {
+.task-node__scribble path {
+  fill: none;
+  stroke: var(--crayon, #d98a3d);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: url(#crayon);
+  /* pathLength={1000} normalizes the random path so the dash math is exact */
+  stroke-dasharray: 1000;
+  animation: scribble-draw 1.7s ease-in-out infinite;
+}
+.task-node__scribble path + path {
+  stroke-width: 4.5;
+  animation-delay: 0.45s;
+}
+@keyframes scribble-draw {
   0% {
-    opacity: 0.1;
-    -webkit-mask-position: 100% 100%;
-    mask-position: 100% 100%;
+    stroke-dashoffset: 1000;
+    opacity: 0;
   }
-  12% {
-    opacity: 0.95;
+  15% {
+    opacity: 0.4;
   }
-  58% {
-    opacity: 0.95;
-    -webkit-mask-position: 0% 0%;
-    mask-position: 0% 0%;
-  }
-  78% {
-    opacity: 0.95;
-    -webkit-mask-position: 0% 0%;
-    mask-position: 0% 0%;
+  62%,
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 0.4;
   }
   100% {
-    opacity: 0.1;
-    -webkit-mask-position: 0% 0%;
-    mask-position: 0% 0%;
+    stroke-dashoffset: 0;
+    opacity: 0;
   }
 }
 
@@ -1627,6 +1637,117 @@ body {
   to {
     opacity: 1;
     transform: translateX(0) rotate(0);
+  }
+}
+
+/* ---------- failed: crayon slipped off the line ---------------------------
+   A one-shot wobble the moment a task flips to failed. */
+.task-node[data-status="failed"] {
+  animation: fail-shake 0.5s ease-in-out 0.15s;
+}
+@keyframes fail-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px) rotate(-0.7deg);
+  }
+  40% {
+    transform: translateX(4px) rotate(0.6deg);
+  }
+  60% {
+    transform: translateX(-3px) rotate(-0.4deg);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+/* ---------- gate note drops onto the canvas ----------------------------- */
+.gate {
+  animation: gate-in 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.25) backwards;
+}
+@keyframes gate-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) rotate(-2.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-0.6deg);
+  }
+}
+
+/* ---------- paper-plane flyby (run kicked off) ---------- */
+.plane-flyby {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  pointer-events: none;
+  animation: plane-flight 2.4s cubic-bezier(0.3, 0.6, 0.6, 1) forwards;
+}
+.plane-flyby__icon {
+  width: 46px;
+  height: 46px;
+  transform: rotate(8deg);
+  filter: drop-shadow(2px 3px 0 rgba(74, 71, 84, 0.18));
+}
+.plane-flyby__icon path {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.plane-flyby__icon .fold {
+  fill: none;
+  stroke-width: 1.5;
+}
+@keyframes plane-flight {
+  0% {
+    transform: translate(-70px, 78vh) rotate(4deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  45% {
+    transform: translate(42vw, 30vh) rotate(-5deg);
+  }
+  75% {
+    transform: translate(75vw, 22vh) rotate(6deg);
+  }
+  100% {
+    transform: translate(108vw, -8vh) rotate(2deg);
+    opacity: 1;
+  }
+}
+
+/* ---------- confetti rain (every task completed) ---------- */
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
+.confetti__bit {
+  position: absolute;
+  top: -16px;
+  border-radius: 2px;
+  border: 1px solid rgba(74, 71, 84, 0.2);
+  opacity: 0.95;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.3, 0.4, 0.6, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  from {
+    transform: translateY(0) rotate(0deg);
+  }
+  to {
+    transform: translateY(105vh) rotate(var(--spin, 540deg));
   }
 }
 
