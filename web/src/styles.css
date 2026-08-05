@@ -648,6 +648,9 @@ body {
   border: 3.5px solid var(--crayon-ink, var(--crayon, var(--ink-soft)));
   filter: url(#crayon);
   pointer-events: none;
+  /* above the scribble: the colouring runs underneath the outline, so it can
+     fill to the very edge without ever crossing the line */
+  z-index: 2;
   transition: border-width 0.15s ease;
   animation: crayon-boil 0.55s steps(1, end) infinite;
   animation-delay: calc(var(--i, 0) * -0.13s);
@@ -664,6 +667,7 @@ body {
   filter: url(#crayon-b);
   transform: rotate(0.5deg);
   pointer-events: none;
+  z-index: 2;
   animation: crayon-boil 0.55s steps(1, end) infinite;
   animation-delay: calc(var(--i, 0) * -0.13s - 0.28s);
 }
@@ -755,38 +759,26 @@ body {
 }
 
 /* ---------- in-progress: crayon scribbles the box in ----------
-   Diagonal crayon hatch revealed by a soft-edged mask that sweeps from the
-   top-left corner to the bottom-right — like scribbling the colour on with a
-   crayon, stroke after stroke — while the task is `dispatched`. The mask is
-   3.4× the node size with a hard-ish gradient stop; sliding its position from
-   100%,100% (only the transparent tail over the node) to 0%,0% (fully opaque
-   head) moves the colour front diagonally across the box. */
-.task-node__fill {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  z-index: 0;
-  /* every sticker is lightly coloured in — flat fills read as software */
-  opacity: 0.16;
-  pointer-events: none;
-  background-image: repeating-linear-gradient(
-    48deg,
-    color-mix(in srgb, var(--crayon, #d98a3d) 70%, transparent) 0 3.4px,
-    transparent 3.4px 7.5px
-  );
-  filter: url(#crayon);
-}
+   While the task runs, an animated scrawl draws itself over the box
+   (see .task-node__scribble below). */
 .task-node__title,
 .task-node__row {
   position: relative;
   z-index: 1;
 }
 
-/* dispatched: a real crayon scrawl, unique per node, draws itself across the
-   box again and again. Two passes: a bold stroke, then a thinner one trailing
-   half a beat behind, like colouring over the same spot twice. */
+/* dispatched: one unbroken colouring pass, chopped into back-and-forth
+   zigzag legs chained end-to-end. Each leg starts drawing only after the
+   previous one lands (delay = leg index × per-leg duration, mirrored by
+   SCRIBBLE_DRAW in DagView.tsx); once every leg is down the pass holds,
+   then a fade wave erases the legs oldest-first and the svg remounts for
+   the next pass. Strokes stay translucent and vary in width, and a grain
+   filter chews their edges into wax tooth. */
 .task-node__scribble {
   position: absolute;
+  /* clip at the inner edge of the border; the outline (z-index 2, 3.5px
+     wide) sits on top and hides the cut stroke ends, so the fill reads
+     full-bleed without anything poking outside */
   inset: 0;
   width: 100%;
   height: 100%;
@@ -798,40 +790,58 @@ body {
 .task-node__scribble path {
   fill: none;
   stroke: var(--crayon, #d98a3d);
-  stroke-width: 7;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: url(#crayon);
-  /* pathLength={1000} normalizes the random path so the dash math is exact */
-  stroke-dasharray: 1000;
-  animation: scribble-draw 1.7s ease-in-out infinite;
+  filter: url(#crayon-fill);
+  /* pathLength={100} normalizes each leg so the dash math is exact;
+     both pins the leg in place once drawn — it stays coloured in until
+     the whole pass fades and remounts — and holds the 0% frame (opacity 0)
+     during the delay, so the round cap's dot can't peek at the border
+     before its leg's turn */
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  /* two animations per leg: the draw-in, then the fade-out. The fade is
+     scheduled from mount (draw + hold + leg × step, mirroring SCRIBBLE_* in
+     DagView.tsx) so the wave erases oldest stroke first without any class
+     flip; listed second, it wins over scribble-leg's opacity once it starts */
+  animation:
+    scribble-leg 0.26s cubic-bezier(0.45, 0.05, 0.5, 1) both,
+    scribble-fade 0.3s ease-out forwards;
+  animation-delay:
+    calc(var(--leg, 0) * 0.26s),
+    calc((var(--legs, 12) * 0.26 + 0.9 + var(--leg, 0) * 0.05) * 1s);
 }
-.task-node__scribble path + path {
-  stroke-width: 4.5;
-  animation-delay: 0.45s;
-}
-@keyframes scribble-draw {
+@keyframes scribble-leg {
   0% {
-    stroke-dashoffset: 1000;
+    stroke-dashoffset: 100;
     opacity: 0;
   }
-  15% {
-    opacity: 0.4;
-  }
-  62%,
-  80% {
-    stroke-dashoffset: 0;
-    opacity: 0.4;
+  2% {
+    opacity: 1;
   }
   100% {
     stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+@keyframes scribble-fade {
+  to {
     opacity: 0;
   }
+}
+/* completed / failed — the same scrawl frozen at its final frame: every leg
+   already down, nothing moving */
+.task-node__scribble--final {
+  transition: none;
+}
+.task-node__scribble--final path {
+  animation: none;
+  stroke-dashoffset: 0;
 }
 
 /* ---------- per-status character ----------------------------------------
    Every state gets its own hand: waiting is faint, ready breathes, running
-   boils, blocked is hatched shut, done and failed are signed off by hand.
+   boils, done and failed are signed off by hand.
    ------------------------------------------------------------------------ */
 
 /* pending — pencilled in lightly, not yet committed to (but still legible
@@ -881,36 +891,6 @@ body {
 @keyframes dot-throb {
   0%, 100% { transform: scale(0.82); opacity: 0.6; }
   50% { transform: scale(1.25); opacity: 1; }
-}
-
-/* blocked — the box is cross-hatched shut with a dense crayon grid */
-.task-node[data-status="blocked"] .task-node__fill {
-  opacity: 0.55;
-  background-image: repeating-linear-gradient(
-      -42deg,
-      color-mix(in srgb, var(--crayon) 60%, transparent) 0 2.4px,
-      transparent 2.4px 8px
-    ),
-    repeating-linear-gradient(
-      44deg,
-      color-mix(in srgb, var(--crayon) 35%, transparent) 0 2px,
-      transparent 2px 10px
-    );
-}
-
-/* failed — angrily scribbled over in its own coral, denser than blocked */
-.task-node[data-status="failed"] .task-node__fill {
-  opacity: 0.34;
-  background-image: repeating-linear-gradient(
-      -38deg,
-      color-mix(in srgb, var(--crayon) 65%, transparent) 0 2.4px,
-      transparent 2.4px 6px
-    ),
-    repeating-linear-gradient(
-      51deg,
-      color-mix(in srgb, var(--crayon) 40%, transparent) 0 2px,
-      transparent 2px 9px
-    );
 }
 
 /* completed / failed — a tick or a scribbled cross signed into the corner,

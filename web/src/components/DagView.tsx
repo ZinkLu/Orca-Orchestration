@@ -47,34 +47,117 @@ function hashId(id: string): number {
 }
 
 /**
- * A genuine hand scrawl: irregular curvy strokes wandering all over the box,
- * overlapping like someone colouring furiously without lifting the crayon.
- * Seeded by the node id, so every task gets its own "handwriting".
+ * Clip the infinite line through (px,py) along (dx,dy) to the box, returning
+ * the [t0,t1] parameter span inside it (null when the line misses entirely).
  */
-function scribblePath(seedId: string, w = 210, h = 72): string {
-  const rand = mulberry32(hashId(seedId));
-  const pts: [number, number][] = [];
-  let x = -4;
-  let y = h * (0.35 + rand() * 0.3);
-  pts.push([x, y]);
-  while (x < w + 4) {
-    x += 7 + rand() * 15;
-    y = 5 + rand() * (h - 10);
-    pts.push([x, y]);
+function clipSpan(
+  px: number,
+  py: number,
+  dx: number,
+  dy: number,
+  box: { x: number; y: number; w: number; h: number },
+): [number, number] | null {
+  let lo = -Infinity;
+  let hi = Infinity;
+  const slabs: [number, number, number, number][] = [
+    [px, dx, box.x, box.x + box.w],
+    [py, dy, box.y, box.y + box.h],
+  ];
+  for (const [p, d, min, max] of slabs) {
+    if (Math.abs(d) < 1e-6) {
+      if (p < min || p > max) return null;
+      continue;
+    }
+    const a = (min - p) / d;
+    const b = (max - p) / d;
+    lo = Math.max(lo, Math.min(a, b));
+    hi = Math.min(hi, Math.max(a, b));
   }
-  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-  for (let i = 1; i < pts.length; i++) {
-    const [px, py] = pts[i - 1];
-    const [cx, cy] = pts[i];
-    const mx = (px + cx) / 2 + (rand() - 0.5) * 18;
-    const my = (py + cy) / 2 + (rand() - 0.5) * 22;
-    d += ` Q${mx.toFixed(1)},${my.toFixed(1)} ${cx.toFixed(1)},${cy.toFixed(1)}`;
-  }
-  return d;
+  return hi - lo > 1 ? [lo, hi] : null;
 }
 
-type TaskNodeData = {
-  label: string;
+type ScribbleLeg = { d: string; width: number; opacity: number };
+
+/**
+ * One continuous colouring pass across the box, chopped into legs: diagonal
+ * strokes chained end-to-end, alternating direction, each bowed a little and
+ * overshooting the edges like a crayon that never lifts. Seeded by the node
+ * id, so every task gets its own "handwriting". Opacities stay translucent
+ * and widths vary per leg, so overlapping passes build up wax.
+ */
+function scribbleLegs(seedId: string, w = 210, h = 72): ScribbleLeg[] {
+  const rand = mulberry32(hashId(seedId));
+  const box = { x: 0, y: 0, w, h };
+  // seeded per node, so every task colours in at its own slant, density and
+  // pressure — same hand, never the same page twice
+  const angle = 45 + (rand() - 0.5) * 16;
+  const spacing = 10.5 * (0.88 + rand() * 0.24);
+  const baseWidth = 10.5 * (0.9 + rand() * 0.2);
+  const bleed = 6;
+  const th = (angle * Math.PI) / 180;
+  const dx = Math.cos(th);
+  const dy = -Math.sin(th);
+  const ax = -dy;
+  const ay = dx;
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const half = (Math.abs(box.w * ax) + Math.abs(box.h * ay)) / 2;
+  const over = () => bleed * (0.15 + rand() * rand() * 1.9) + (rand() < 0.12 ? bleed * (1.5 + rand()) : 0);
+  const legs: ScribbleLeg[] = [];
+  let prev: { x: number; y: number } | null = null;
+  let t = -half - spacing * 0.5;
+  let i = 0;
+  while (t < half + spacing * 0.5) {
+    const px = cx + t * ax;
+    const py = cy + t * ay;
+    const span = clipSpan(px, py, dx, dy, box);
+    t += spacing * (0.86 + rand() * 0.3);
+    if (!span) continue;
+    const uA = span[0] - over();
+    const uB = span[1] + over();
+    const at = (u: number) => ({ x: px + dx * u, y: py + dy * u });
+    const forward = i % 2 === 0;
+    let s = at(forward ? uA : uB);
+    let e = at(forward ? uB : uA);
+    const piv = (rand() - 0.5) * 0.075;
+    const px0 = (s.x + e.x) / 2;
+    const py0 = (s.y + e.y) / 2;
+    const spin = (p: { x: number; y: number }) => {
+      const vx = p.x - px0;
+      const vy = p.y - py0;
+      return { x: px0 + vx * Math.cos(piv) - vy * Math.sin(piv), y: py0 + vx * Math.sin(piv) + vy * Math.cos(piv) };
+    };
+    s = spin(s);
+    e = spin(e);
+    const bow = (rand() - 0.5) * 4.5;
+    const mx = px0 + ax * bow + (rand() - 0.5) * 3;
+    const my = py0 + ay * bow + (rand() - 0.5) * 3;
+    const n1f = (v: number) => v.toFixed(1);
+    let d = `M${n1f(s.x)},${n1f(s.y)}`;
+    if (prev) {
+      const out = (forward ? -1 : 1) * (1.5 + rand() * 4.5);
+      const kx = (prev.x + s.x) / 2 + dx * out;
+      const ky = (prev.y + s.y) / 2 + dy * out;
+      d = `M${n1f(prev.x)},${n1f(prev.y)} Q${n1f(kx)},${n1f(ky)} ${n1f(s.x)},${n1f(s.y)}`;
+    }
+    d += ` Q${n1f(mx)},${n1f(my)} ${n1f(e.x)},${n1f(e.y)}`;
+    legs.push({ d, width: baseWidth * (0.82 + rand() * 0.36), opacity: 0.68 * (0.75 + rand() * 0.5) });
+    prev = e;
+    i++;
+  }
+  return legs;
+}
+
+/** scribble timing (seconds) — must mirror the path animation durations and
+    delay steps in styles.css (.task-node__scribble path): each leg draws for
+    SCRIBBLE_DRAW, the full pass holds SCRIBBLE_HOLD, then a fade wave erases
+    the legs oldest-first, SCRIBBLE_FADE each, SCRIBBLE_FADE_STEP apart */
+const SCRIBBLE_DRAW = 0.26;
+const SCRIBBLE_HOLD = 0.9;
+const SCRIBBLE_FADE = 0.3;
+const SCRIBBLE_FADE_STEP = 0.05;
+
+type TaskNodeData = {  label: string;
   status: TaskStatus;
   selected: boolean;
   harness: string;
@@ -91,9 +174,23 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
   const meta = STATUS_META[data.status];
   const isTB = data.dir === "TB";
   const alive = data.status === "ready" || data.status === "dispatched";
-  // two passes over the same box: a bold stroke plus a thinner, lighter one
-  // running half a beat behind — colouring over the same spot twice
-  const [scrawlA, scrawlB] = useMemo(() => [scribblePath(id), scribblePath(`${id}~2`)], [id]);
+  // one unbroken colouring pass, chopped into back-and-forth zigzag legs.
+  // The legs draw strictly one after another (leg N+1 starts when N lands),
+  // hold, then a fade wave erases them oldest-first, and the svg remounts.
+  const legs = useMemo(() => scribbleLegs(id), [id]);
+  const [cycle, setCycle] = useState(0);
+  const dispatched = data.status === "dispatched";
+  useEffect(() => {
+    if (!dispatched) return;
+    // the fade wave itself is scheduled in CSS; JS only remounts the svg once
+    // the newest leg has finished fading
+    const wave = (legs.length - 1) * SCRIBBLE_FADE_STEP + SCRIBBLE_FADE;
+    const cycleTimer = window.setTimeout(
+      () => setCycle((c) => c + 1),
+      (legs.length * SCRIBBLE_DRAW + SCRIBBLE_HOLD + wave) * 1000,
+    );
+    return () => window.clearTimeout(cycleTimer);
+  }, [dispatched, legs.length]);
   return (
     <div
       className={[
@@ -114,18 +211,33 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
         } as CSSProperties
       }
     >
-      {/* crayon texture always faintly colours the box; a real hand scrawl
-          draws itself over and over while the task runs */}
-      <div className="task-node__fill" aria-hidden="true" />
-      {data.status === "dispatched" && (
+      {/* a real hand scrawl draws itself over and over while the task runs;
+          completed/failed nodes keep the same scrawl frozen at its final
+          frame — fully coloured in, no animation, still their own hand */}
+      {(dispatched || data.status === "completed" || data.status === "failed") && (
         <svg
-          className="task-node__scribble"
+          key={cycle}
+          className={[
+            "task-node__scribble",
+            dispatched ? "" : "task-node__scribble--final",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           viewBox="0 0 210 72"
           preserveAspectRatio="none"
+          style={{ "--legs": legs.length } as CSSProperties}
           aria-hidden="true"
         >
-          <path pathLength={1000} d={scrawlA} />
-          <path pathLength={1000} d={scrawlB} strokeOpacity={0.55} />
+          {legs.map((leg, i) => (
+            <path
+              key={i}
+              pathLength={100}
+              d={leg.d}
+              strokeWidth={leg.width.toFixed(1)}
+              strokeOpacity={leg.opacity.toFixed(3)}
+              style={{ "--leg": i } as CSSProperties}
+            />
+          ))}
         </svg>
       )}
       {/* breathing dashed ring (ready) / radiating pulse (dispatched) */}

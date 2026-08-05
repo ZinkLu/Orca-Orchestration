@@ -74,6 +74,40 @@ function HandDrawnDefs() {
             />
           </filter>
         ))}
+        {/* wax grain for the running node's scribble: a slow wobble warps the
+            stroke, then a fine tooth noise bites translucent pits into it, so
+            the stroke reads as crayon dragged over paper texture */}
+        <filter id="crayon-fill" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.012 0.02"
+            numOctaves="3"
+            seed={13}
+            result="wobble"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="wobble"
+            scale="6"
+            xChannelSelector="R"
+            yChannelSelector="G"
+            result="warped"
+          />
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.5"
+            numOctaves="2"
+            seed={13}
+            result="tooth"
+          />
+          <feColorMatrix
+            in="tooth"
+            type="matrix"
+            values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.1 0 0 0 0.3"
+            result="toothAlpha"
+          />
+          <feComposite in="warped" in2="toothAlpha" operator="in" />
+        </filter>
         {[
           ["pencil-edge", 11],
           ["pencil-edge-b", 29],
