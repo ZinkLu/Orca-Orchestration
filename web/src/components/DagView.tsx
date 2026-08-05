@@ -182,15 +182,16 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
   const dispatched = data.status === "dispatched";
   useEffect(() => {
     if (!dispatched) return;
-    // the fade wave itself is scheduled in CSS; JS only remounts the svg once
-    // the newest leg has finished fading
+    // the fade wave itself is scheduled in CSS; JS remounts the svg once the
+    // newest leg has finished fading. Re-arms on every cycle (dep below) so
+    // the scrawl loops for as long as the task runs.
     const wave = (legs.length - 1) * SCRIBBLE_FADE_STEP + SCRIBBLE_FADE;
     const cycleTimer = window.setTimeout(
       () => setCycle((c) => c + 1),
       (legs.length * SCRIBBLE_DRAW + SCRIBBLE_HOLD + wave) * 1000,
     );
     return () => window.clearTimeout(cycleTimer);
-  }, [dispatched, legs.length]);
+  }, [dispatched, legs.length, cycle]);
   return (
     <div
       className={[
