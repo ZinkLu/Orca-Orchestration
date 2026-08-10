@@ -11,6 +11,7 @@ import {
   createRun,
   createTempCoordinatorTerminal,
   listGates,
+  listModels,
   listRuns,
   listTasks,
   listTerminals,
@@ -145,12 +146,14 @@ app.post("/api/run", async (req, res) => {
     return;
   }
   const harnessByTask = (req.body?.harnessByTask ?? {}) as Record<string, string>;
+  const modelByTask = (req.body?.modelByTask ?? {}) as Record<string, string>;
   const defaultHarness = String(req.body?.defaultHarness ?? "claude").trim() || "claude";
   const maxConcurrency = Math.max(1, Math.min(16, Number(req.body?.maxConcurrency) || 4));
   try {
     await startCoordinator({
       runId,
       harnessByTask,
+      modelByTask,
       defaultHarness,
       maxConcurrency,
       worktree: WORKTREE,
@@ -226,6 +229,22 @@ app.get("/api/config", async (_req, res) => {
 app.put("/api/config", async (req, res) => {
   try {
     res.json(await saveConfig(WORKSPACE_DIR, req.body ?? {}));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+/**
+ * Models available for a harness, for the node model picker.
+ *
+ * Only opencode actually has an enumerable list (`opencode models`). claude/
+ * codex/cursor return an empty array here — their models have no programmatic
+ * source, so the UI offers free-text input for them instead.
+ */
+app.get("/api/models/:harness", async (req, res) => {
+  const harness = String(req.params.harness ?? "").trim().toLowerCase();
+  try {
+    res.json({ harness, models: await listModels(harness) });
   } catch (err) {
     fail(res, err);
   }

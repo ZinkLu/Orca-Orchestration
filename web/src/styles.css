@@ -1312,7 +1312,6 @@ body {
   white-space: pre-wrap;
   color: var(--ink);
 }
-.node-panel__select,
 .node-panel__custom {
   width: 100%;
   font-family: var(--font-body);
@@ -1322,12 +1321,9 @@ body {
   border: 2px solid var(--line-strong);
   background: var(--paper);
   color: var(--ink);
-}
-.node-panel__custom {
   margin-top: 8px;
   font-family: "Fredoka", ui-monospace, monospace;
 }
-.node-panel__select:focus,
 .node-panel__custom:focus {
   outline: none;
   border-color: var(--sky);
@@ -1369,7 +1365,6 @@ body {
   font-size: 12px;
   color: var(--ink-soft);
 }
-.exec__select,
 .exec__custom,
 .exec__num {
   font-family: var(--font-body);
@@ -1381,7 +1376,6 @@ body {
   color: var(--ink);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
-.exec__select:hover:not(:disabled),
 .exec__custom:hover:not(:disabled),
 .exec__num:hover:not(:disabled) {
   border-color: var(--ink-soft);
@@ -1398,7 +1392,6 @@ body {
 .exec__num {
   width: 52px;
 }
-.exec__select:focus,
 .exec__custom:focus,
 .exec__num:focus {
   outline: none;
@@ -1655,7 +1648,8 @@ body {
   /* a few animations do real work — they reveal something rather than just
      decorate it. Without them running, hand the end state over directly. */
   .task-node__stamp path,
-  .task-node__lasso path {
+  .task-node__lasso path,
+  .doodle-select__check path {
     stroke-dashoffset: 0;
   }
   /* the sparks are pure celebration; still, they'd otherwise freeze mid-air */
@@ -1690,32 +1684,280 @@ body {
   gap: 8px;
 }
 
-.runpick__select {
-  max-width: 220px;
-  padding: 6px 9px;
+/* the DoodleSelect sits inline in the topbar and mustn't grow past its label */
+.runpick .doodle-select {
+  width: auto;
+  max-width: 240px;
+}
+
+/* ---------- DoodleSelect (hand-drawn dropdown, no native <select>) ----------
+   The trigger stays in the "soft and airy" register — wonky radii, sticker
+   shadow, a scribbled chevron — while the dropdown panel is a little paper
+   card with a tape strip and a crayon-dashed outline, in the same vocabulary
+   as the pinned notes. The panel is portalled to document.body (fixed), so
+   .node-panel's overflow-y can't clip it. */
+.doodle-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
   font-family: var(--font-body);
   font-size: 13px;
   color: var(--ink);
-  background: var(--paper);
-  border: 2px solid var(--line-strong);
+  text-align: left;
+  padding: 8px 11px;
   border-radius: 12px 9px 13px 8px;
-  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
+  border: 2px solid var(--line-strong);
+  background: var(--paper);
   cursor: pointer;
-  transition: border-color 0.18s ease, transform 0.18s ease;
+  box-shadow: 2px 2px 0 rgba(74, 71, 84, 0.1);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
-.runpick__select:hover:not(:disabled) {
+.doodle-select:hover:not(:disabled) {
   border-color: var(--ink-soft);
   transform: translateY(-1px) rotate(-0.4deg);
 }
-.runpick__select:focus {
+.doodle-select:focus {
   outline: none;
   border-color: var(--sky);
   box-shadow: 0 0 0 3px var(--sky-wash);
 }
-.runpick__select:disabled {
+.doodle-select--open {
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+  transform: none;
+}
+.doodle-select:disabled {
   color: var(--ink-soft);
   opacity: 0.6;
   cursor: not-allowed;
+}
+/* compact variant for the toolbars, sized like the old inline controls */
+.doodle-select--sm {
+  width: auto;
+  font-size: 12.5px;
+  padding: 5px 9px;
+  border-radius: 10px 8px 11px 8px;
+}
+.doodle-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doodle-select__value--dim {
+  color: var(--ink-soft);
+}
+/* the chevron is drawn, not typeset — fine grain so a small glyph stays
+   legible (the coarse #crayon would mush it). It flips when the card opens. */
+.doodle-select__chev {
+  flex: none;
+  width: 13px;
+  height: 9px;
+  overflow: visible;
+  filter: url(#crayon-fine);
+  transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.doodle-select__chev path {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.doodle-select:hover:not(:disabled) .doodle-select__chev path {
+  stroke: var(--ink);
+}
+.doodle-select--open .doodle-select__chev {
+  transform: rotate(180deg);
+}
+
+/* the dropdown: a paper card that drops out of the trigger's pocket */
+.doodle-select__panel {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 16px 13px 17px 12px;
+  box-shadow: var(--shadow-sticker);
+  transform: rotate(-0.5deg);
+  transform-origin: 18px top;
+  animation: doodle-panel-in 0.22s cubic-bezier(0.2, 1.2, 0.3, 1) backwards;
+}
+.doodle-select__panel--up {
+  transform-origin: 18px bottom;
+}
+@keyframes doodle-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-9px) rotate(-2.2deg) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-0.5deg) scale(1);
+  }
+}
+/* crayon-dashed outline, same hand as the empty-Run note */
+.doodle-select__panel::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2.5px dashed var(--line-strong);
+  filter: url(#crayon);
+  pointer-events: none;
+}
+/* a strip of washi tape holding the card to the page */
+.doodle-select__panel::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 24px;
+  width: 52px;
+  height: 18px;
+  transform: rotate(-3deg);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(240, 185, 78, 0.32) 0 6px,
+    rgba(240, 185, 78, 0.16) 6px 12px
+  );
+  border-left: 1px dashed rgba(179, 127, 22, 0.35);
+  border-right: 1px dashed rgba(179, 127, 22, 0.35);
+  pointer-events: none;
+}
+.doodle-select__panel--up::after {
+  top: auto;
+  bottom: -10px;
+  transform: rotate(3deg);
+}
+
+/* search box — a doodled magnifier leading the input */
+.doodle-select__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 6px 9px;
+  border: 2px solid var(--line-strong);
+  border-radius: 10px 8px 11px 8px;
+  background: var(--paper);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.doodle-select__search:focus-within {
+  border-color: var(--sky);
+  box-shadow: 0 0 0 3px var(--sky-wash);
+}
+.doodle-select__mag {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  overflow: visible;
+  filter: url(#crayon-fine);
+}
+.doodle-select__mag circle,
+.doodle-select__mag path {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.doodle-select__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink);
+}
+.doodle-select__search input::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+.doodle-select__options {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.doodle-select__options::-webkit-scrollbar {
+  width: 8px;
+}
+.doodle-select__options::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+.doodle-select__opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px 8px 11px 7px;
+  cursor: pointer;
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+.doodle-select__opt--active {
+  background: var(--paper-2);
+  transform: translateX(2px);
+}
+.doodle-select__opt--selected {
+  background: var(--sky-wash);
+}
+.doodle-select__opt--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.doodle-select__opt-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.doodle-select__opt-label {
+  font-size: 13px;
+  color: var(--ink);
+  word-break: break-word;
+}
+.doodle-select__opt-hint {
+  font-family: "Fredoka", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the tick draws itself in like the node stamps */
+.doodle-select__check {
+  flex: none;
+  width: 15px;
+  height: 13px;
+  overflow: visible;
+  filter: url(#crayon-fine);
+}
+.doodle-select__check path {
+  fill: none;
+  stroke: #4d9e62;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: lasso-draw 0.3s cubic-bezier(0.5, 0.05, 0.4, 1) forwards;
+}
+.doodle-select__empty {
+  padding: 12px 10px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-align: center;
 }
 
 /* Retry counter next to the running indicator: Orca circuit-breaks a task after

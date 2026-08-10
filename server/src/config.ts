@@ -13,6 +13,9 @@ import { join } from "node:path";
 export interface ViewerConfig {
   defaultHarness?: string;
   harnessByTask?: Record<string, string>;
+  /** Per-task model override. Only set for tasks whose harness supports one;
+   * otherwise the agent's default model is used. */
+  modelByTask?: Record<string, string>;
   maxConcurrency?: number;
   layout?: string;
   /** Last Run the user was looking at — tasks are Run-scoped since Orca 1.4.160. */
@@ -59,6 +62,13 @@ function sanitize(raw: unknown): ViewerConfig {
       if (typeof v === "string" && v.trim()) map[k] = v.trim();
     }
     out.harnessByTask = map;
+  }
+  if (r.modelByTask && typeof r.modelByTask === "object" && !Array.isArray(r.modelByTask)) {
+    const map: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r.modelByTask as Record<string, unknown>)) {
+      if (typeof v === "string" && v.trim()) map[k] = v.trim();
+    }
+    out.modelByTask = map;
   }
   if (typeof r.maxConcurrency === "number" && Number.isFinite(r.maxConcurrency)) {
     out.maxConcurrency = Math.max(1, Math.min(16, Math.round(r.maxConcurrency)));

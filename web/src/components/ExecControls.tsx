@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchRunStatus, startRun, stopRun } from "../api";
+import { DoodleSelect } from "./DoodleSelect";
 import {
   getMaxConcurrency,
   harnessMap,
+  modelMap,
   setDefaultHarness,
   setMaxConcurrency,
   useConfig,
@@ -108,6 +110,7 @@ export function ExecControls({
         harnessMap(taskIdsRef.current),
         resolvedDefault,
         getMaxConcurrency(),
+        modelMap(taskIdsRef.current),
       );
       setStatus(s);
     } catch (e) {
@@ -132,21 +135,18 @@ export function ExecControls({
 
   return (
     <div className="exec">
-      <label className="exec__field">
+      <div className="exec__field">
         <span className="exec__label">默认 harness</span>
-        <select
-          className="exec__select"
+        <DoodleSelect
+          size="sm"
           value={defHarness}
-          onChange={(e) => pickDefault(e.target.value)}
+          onChange={pickDefault}
           disabled={running}
-        >
-          {HARNESSES.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-          <option value={CUSTOM}>自定义…</option>
-        </select>
+          options={[
+            ...HARNESSES.map((h) => ({ value: h, label: h })),
+            { value: CUSTOM, label: "自定义…" },
+          ]}
+        />
         {defHarness === CUSTOM && (
           <input
             className="exec__custom"
@@ -156,7 +156,7 @@ export function ExecControls({
             disabled={running}
           />
         )}
-      </label>
+      </div>
 
       <label className="exec__field">
         <span className="exec__label">最多并行</span>

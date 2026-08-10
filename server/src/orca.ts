@@ -530,8 +530,9 @@ export async function startSupervisedWorker(opts: {
   runId: string;
   from: string;
   worktree?: string;
+  model?: string;
 }): Promise<StartedWorker> {
-  const result = await runOrca<Record<string, unknown>>([
+  const args = [
     "orchestration",
     "worker-start",
     "--task",
@@ -544,8 +545,32 @@ export async function startSupervisedWorker(opts: {
     opts.runId,
     "--from",
     opts.from,
-  ]);
+  ];
+  if (opts.model) args.push("--model", opts.model);
+  const result = await runOrca<Record<string, unknown>>(args);
   return { mode: "supervised", dispatchId: readDispatchId(result), handle: null };
+}
+
+/**
+ * Enumerate available models for a harness.
+ *
+ * Only opencode exposes a real, enumerable list (`opencode models` prints
+ * `provider/model` lines). claude/codex/cursor have no programmatic model list
+ * from either orca or their own CLIs, so this returns nothing for them — the UI
+ * falls back to free-text input. Anything else (gemini/grok/kimi/custom) is not
+ * model-selectable here either.
+ */
+export async function listModels(harness: string): Promise<string[]> {
+  if (harness !== "opencode") return [];
+  try {
+    const { stdout } = await pExecFile("opencode", ["models"], { timeout: 20000 });
+    return stdout
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(l));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -574,6 +599,7 @@ async function startOpencodeWorker(opts: {
   runId: string;
   from: string;
   worktree?: string;
+  model?: string;
 }): Promise<StartedWorker> {
   const created = await runOrca<{ terminal?: { handle?: string } }>([
     "terminal",
@@ -622,7 +648,11 @@ async function startOpencodeWorker(opts: {
   // for byte intact.
   const preambleFile = join(tmpdir(), `orca-preamble-${opts.taskId}.txt`);
   await writeFile(preambleFile, shown.preamble);
-  const cmd = `opencode run --auto "$(cat ${preambleFile})"`;
+  // `opencode run -m <provider/model>` selects the model; the preamble is passed
+  // as ONE shell arg read from a file. Quoting the model keeps any odd provider
+  // ids safe. `--auto` is the mandatory autonomous flag (see the docstring).
+  const modelArg = opts.model ? ` -m "${opts.model}"` : "";
+  const cmd = `opencode run --auto${modelArg} "$(cat ${preambleFile})"`;
   await runOrca(["terminal", "send", "--terminal", handle, "--text", cmd, "--enter"]);
 
   return { mode: "legacy", dispatchId: null, handle };
@@ -647,6 +677,7 @@ export async function startLegacyWorker(opts: {
   runId: string;
   from: string;
   worktree?: string;
+  model?: string;
 }): Promise<StartedWorker> {
   if (opts.harness === "opencode") {
     return startOpencodeWorker(opts);

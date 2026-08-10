@@ -67,8 +67,9 @@ export async function startRun(
   harnessByTask: Record<string, string>,
   defaultHarness: string,
   maxConcurrency: number,
+  modelByTask: Record<string, string>,
 ): Promise<RunStatus> {
-  return post(`/api/run`, { runId, harnessByTask, defaultHarness, maxConcurrency });
+  return post(`/api/run`, { runId, harnessByTask, defaultHarness, maxConcurrency, modelByTask });
 }
 
 export async function stopRun(): Promise<void> {
@@ -100,4 +101,14 @@ export async function saveConfig(patch: Partial<ViewerConfig>): Promise<void> {
     body: JSON.stringify(patch),
   });
   if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+}
+
+/**
+ * Models available for a harness. Only opencode returns a list (`opencode
+ * models`); claude/codex/cursor return an empty array — the UI falls back to
+ * free-text input for those.
+ */
+export async function fetchModels(harness: string): Promise<string[]> {
+  const { models } = await get<{ models: string[] }>(`/api/models/${encodeURIComponent(harness)}`);
+  return models ?? [];
 }

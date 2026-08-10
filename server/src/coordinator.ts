@@ -50,6 +50,8 @@ interface Attempt {
 interface StartOpts {
   runId: string;
   harnessByTask: Record<string, string>;
+  /** Per-task model override; only used when the task's harness supports one. */
+  modelByTask: Record<string, string>;
   defaultHarness: string;
   maxConcurrency: number;
   /** Worktree the coordinator terminal (and therefore `current` workers) lives in. */
@@ -275,6 +277,7 @@ async function startOne(
 ): Promise<void> {
   const from = state.coordinatorHandle!;
   try {
+    const model = opts.modelByTask[task.id];
     let started: StartedWorker;
     // opencode's TUI does not reliably accept `worker-start`'s injected
     // preamble (orca #9951) even though orca recognizes it as an agent — the
@@ -288,6 +291,7 @@ async function startOne(
         runId,
         from,
         worktree: opts.worktree,
+        model,
       });
     } else {
       try {
@@ -297,6 +301,7 @@ async function startOne(
           runId,
           from,
           worktree: "current",
+          model,
         });
       } catch (err) {
         // A harness Orca doesn't know as a configured TUI agent (or a custom
@@ -309,6 +314,7 @@ async function startOne(
           runId,
           from,
           worktree: opts.worktree,
+          model,
         });
       }
     }

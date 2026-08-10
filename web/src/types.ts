@@ -138,8 +138,28 @@ export interface RunStatus {
 export interface ViewerConfig {
   defaultHarness: string;
   harnessByTask: Record<string, string>;
+  /**
+   * Per-task model override. Only meaningful for harnesses that support model
+   * selection (opencode via `-m`, claude/codex/cursor via `worker-start
+   * --model`); empty string / absent means the agent's default model.
+   */
+  modelByTask: Record<string, string>;
   maxConcurrency: number;
   layout: LayoutKind | "";
   /** Last Run the user was viewing; restored on reload. */
   runId: string;
 }
+
+/**
+ * Harness → model-selection capability. opencode gets an enumerable dropdown
+ * (`opencode models`); claude/codex/cursor get free-text. Everything else has
+ * no viewer-side model control.
+ */
+export type ModelPickerKind = "select" | "text" | "none";
+
+export const MODEL_PICKER: Record<string, ModelPickerKind> = {
+  opencode: "select",
+  claude: "text",
+  codex: "text",
+  cursor: "text",
+};

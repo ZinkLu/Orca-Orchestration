@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createRun, fetchRuns } from "../api";
 import type { OrcaRun } from "../types";
+import { DoodleSelect } from "./DoodleSelect";
 
 /**
  * Run selector.
@@ -69,20 +70,19 @@ export function RunPicker({
   return (
     <div className="runpick">
       <span className="exec__label">Run</span>
-      <select
-        className="runpick__select"
+      <DoodleSelect
         value={runId}
-        onChange={(e) => onPick(e.target.value)}
+        onChange={onPick}
         disabled={disabled || runs.length === 0}
+        placeholder="（没有 Run）"
+        emptyText="（没有 Run）"
         title={current ? `${current.id} · ${current.objective}` : "选择一个 Run"}
-      >
-        {runs.length === 0 && <option value="">（没有 Run）</option>}
-        {runs.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.objective || r.id}
-          </option>
-        ))}
-      </select>
+        options={runs.map((r) => ({
+          value: r.id,
+          label: r.objective || r.id,
+          hint: r.id,
+        }))}
+      />
       <button
         className="btn btn--ghost"
         onClick={onCreate}

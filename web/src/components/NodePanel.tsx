@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
-import { getDefaultHarness, getNodeHarness, setNodeHarness, useConfig } from "../harness";
-import { HARNESSES, STATUS_META, type DagNode } from "../types";
+import { fetchModels } from "../api";
+import {
+  effectiveHarness,
+  getDefaultHarness,
+  getNodeHarness,
+  getNodeModel,
+  setNodeHarness,
+  setNodeModel,
+  useConfig,
+} from "../harness";
+import { HARNESSES, MODEL_PICKER, STATUS_META, type DagNode } from "../types";
+import { DoodleSelect } from "./DoodleSelect";
 
 const INHERIT = "__inherit__";
 const CUSTOM = "__custom__";
@@ -34,6 +44,31 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
     setNodeHarness(node.id, v.trim() || null);
   }
 
+  // --- per-node model ------------------------------------------------
+  // The model picker depends on the node's EFFECTIVE harness (its own override,
+  // else the inherited default), not the {sel,custom} transient state — so it
+  // reacts correctly even when the node just inherits. opencode → dropdown from
+  // `opencode models`; claude/codex/cursor → free-text (no enumerable list);
+  // anything else → no model control.
+  const effHarness = effectiveHarness(node.id);
+  const picker = MODEL_PICKER[effHarness] ?? "none";
+  const model = getNodeModel(node.id);
+  const [openCodeModels, setOpenCodeModels] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (effHarness !== "opencode") return;
+    let alive = true;
+    fetchModels("opencode")
+      .then((m) => {
+        if (alive) setOpenCodeModels(m);
+      })
+      .catch(() => {
+        if (alive) setOpenCodeModels([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [effHarness]);
+
   return (
     <aside className="node-panel">
       <button className="node-panel__close" onClick={onClose} aria-label="关闭">
@@ -51,15 +86,15 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
 
       <div className="node-panel__field">
         <span className="node-panel__key">Harness（这个节点用哪个 agent）</span>
-        <select className="node-panel__select" value={sel} onChange={(e) => pick(e.target.value)}>
-          <option value={INHERIT}>跟随默认（{getDefaultHarness()}）</option>
-          {HARNESSES.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-          <option value={CUSTOM}>自定义…</option>
-        </select>
+        <DoodleSelect
+          value={sel}
+          onChange={pick}
+          options={[
+            { value: INHERIT, label: `跟随默认（${getDefaultHarness()}）` },
+            ...HARNESSES.map((h) => ({ value: h, label: h })),
+            { value: CUSTOM, label: "自定义…" },
+          ]}
+        />
         {sel === CUSTOM && (
           <input
             className="node-panel__custom"
@@ -69,6 +104,32 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
           />
         )}
       </div>
+
+      {picker !== "none" && (
+        <div className="node-panel__field">
+          <span className="node-panel__key">
+            Model（{effHarness}）{model ? null : " · 默认"}
+          </span>
+          {picker === "select" ? (
+            <DoodleSelect
+              value={model ?? ""}
+              onChange={(v) => setNodeModel(node.id, v || null)}
+              loading={openCodeModels === null}
+              options={[
+                { value: "", label: "（默认模型）" },
+                ...(openCodeModels ?? []).map((m) => ({ value: m, label: m })),
+              ]}
+            />
+          ) : (
+            <input
+              className="node-panel__custom"
+              value={model ?? ""}
+              placeholder={`模型名，如 ${effHarness === "claude" ? "opus" : effHarness === "codex" ? "o3" : "<model>"}`}
+              onChange={(e) => setNodeModel(node.id, e.target.value.trim() || null)}
+            />
+          )}
+        </div>
+      )}
 
       {/* Orca tracks the running attempt as a Dispatch; task-list only carries
           these while the task is dispatched. */}

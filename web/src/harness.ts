@@ -10,6 +10,7 @@ import { fetchConfig, saveConfig } from "./api";
 import type { LayoutKind, ViewerConfig } from "./types";
 
 const NODE_PREFIX = "orca-dag:harness:";
+const MODEL_PREFIX = "orca-dag:model:";
 const DEFAULT_KEY = "orca-dag:default-harness";
 const LAYOUT_KEY = "orca-dag:layout";
 const RUN_KEY = "orca-dag:run-id";
@@ -17,6 +18,7 @@ const RUN_KEY = "orca-dag:run-id";
 const DEFAULTS: ViewerConfig = {
   defaultHarness: "claude",
   harnessByTask: {},
+  modelByTask: {},
   maxConcurrency: 4,
   layout: "",
   runId: "",
@@ -59,6 +61,7 @@ export async function initConfig(): Promise<void> {
     defaultHarness:
       asString(server.defaultHarness) || localStorage.getItem(DEFAULT_KEY) || DEFAULTS.defaultHarness,
     harnessByTask: asHarnessMap(server.harnessByTask) ?? readLegacyNodeHarnesses(),
+    modelByTask: asHarnessMap(server.modelByTask) ?? {},
     maxConcurrency: asConcurrency(server.maxConcurrency) ?? DEFAULTS.maxConcurrency,
     layout: asLayout(server.layout) || asLayout(localStorage.getItem(LAYOUT_KEY)) || "",
     runId: asString(server.runId) || localStorage.getItem(RUN_KEY) || "",
@@ -92,10 +95,13 @@ function mirrorToLocalStorage(): void {
     if (config.layout) localStorage.setItem(LAYOUT_KEY, config.layout);
     if (config.runId) localStorage.setItem(RUN_KEY, config.runId);
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith(NODE_PREFIX)) localStorage.removeItem(key);
+      if (key.startsWith(NODE_PREFIX) || key.startsWith(MODEL_PREFIX)) localStorage.removeItem(key);
     }
     for (const [id, h] of Object.entries(config.harnessByTask)) {
       localStorage.setItem(NODE_PREFIX + id, h);
+    }
+    for (const [id, m] of Object.entries(config.modelByTask)) {
+      localStorage.setItem(MODEL_PREFIX + id, m);
     }
   } catch {
     /* private mode etc. — the server file is the source of truth anyway */
@@ -147,6 +153,17 @@ export function setNodeHarness(taskId: string, harness: string | null): void {
   update({ harnessByTask });
 }
 
+export function getNodeModel(taskId: string): string | null {
+  return config.modelByTask[taskId] ?? null;
+}
+
+export function setNodeModel(taskId: string, model: string | null): void {
+  const modelByTask = { ...config.modelByTask };
+  if (model) modelByTask[taskId] = model;
+  else delete modelByTask[taskId];
+  update({ modelByTask });
+}
+
 export function getDefaultHarness(): string {
   return config.defaultHarness;
 }
@@ -191,6 +208,16 @@ export function harnessMap(taskIds: string[]): Record<string, string> {
   for (const id of taskIds) {
     const h = getNodeHarness(id);
     if (h) m[id] = h;
+  }
+  return m;
+}
+
+/** Map of {taskId: model} for nodes with an explicit model override. */
+export function modelMap(taskIds: string[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const id of taskIds) {
+    const md = getNodeModel(id);
+    if (md) m[id] = md;
   }
   return m;
 }
