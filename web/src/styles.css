@@ -889,8 +889,10 @@ body {
   animation: dot-throb 1.15s ease-in-out infinite;
 }
 @keyframes dot-throb {
-  0%, 100% { transform: scale(0.82); opacity: 0.6; }
-  50% { transform: scale(1.25); opacity: 1; }
+  /* Use the independent property so a React Flow handle keeps the translate()
+     that centres it on the card boundary while the dot pulses. */
+  0%, 100% { scale: 0.82; opacity: 0.6; }
+  50% { scale: 1.25; opacity: 1; }
 }
 
 /* completed / failed — a tick or a scribbled cross signed into the corner,
@@ -1008,8 +1010,7 @@ body {
 /* pencil edges — every dependency is a scrawled line, not a bezier. The
    #pencil-edge filters are userSpaceOnUse (a zero-height horizontal bbox would
    collapse an objectBoundingBox filter), and all three seeds flip on a steps()
-   loop so the whole web of lines boils like a pencil test. The filter wraps the
-   path's full rendering, so the arrowhead markers wobble along with the line. */
+   loop so the whole web of lines boils like a pencil test. */
 .react-flow__edge-path {
   stroke: #6f6757;
   stroke-width: 3.2;
@@ -1030,16 +1031,15 @@ body {
   33% { filter: url(#pencil-edge-b); }
   66% { filter: url(#pencil-edge-c); }
 }
-.react-flow__arrowhead {
-  fill: #6f6757;
-}
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--sky);
 }
-/* a dependency not yet reached stays lighter, but still clearly a drawn line */
+/* a dependency not yet reached stays lighter and dashed — solid ink is
+   reserved for lines the work has actually touched */
 .react-flow__edge.edge--idle .react-flow__edge-path {
   opacity: 0.68;
   stroke-width: 3;
+  stroke-dasharray: 7 9;
 }
 /* a satisfied dependency gets inked in green — and presses down once, hard, on
    the poll where its upstream node completed. (A dash-offset "draw" would need
@@ -1074,65 +1074,20 @@ body {
   stroke: #8f8672;
   stroke-width: 2.4;
   stroke-linecap: round;
-  stroke-dasharray: 1.5 8.5;
+  stroke-dasharray: 7 9;
   opacity: 0.55;
-  animation: sketch-crawl 3.2s linear infinite;
 }
-/* dashes drift slowly downstream — the sketch is alive, not static */
-@keyframes sketch-crawl {
-  to {
-    stroke-dashoffset: -100;
-  }
-}
+/* the draw path's dash is driven by the Web Animations API
+   (element.animate) with the measured per-edge length baked into concrete
+   keyframes — so every edge draws at the same uniform speed no matter how
+   long it is, on the browser's animation timeline rather than a per-frame JS
+   loop. This CSS only styles how the pencil looks; the dasharray/offset/
+   opacity are all owned by the WAAPI animation. */
 .pencil-edge__draw {
   stroke: #4a4231;
   stroke-width: 3.8;
   stroke-linecap: round;
-  stroke-dasharray: 1200;
-  stroke-dashoffset: 1200;
-  animation: pencil-trace 2.6s cubic-bezier(0.45, 0.05, 0.35, 1) infinite;
-}
-/* pencil press-on: the line darkens and thickens slightly as it's drawn,
-   holds, then lifts so the next pass can start from the source again */
-@keyframes pencil-trace {
-  0% {
-    stroke-dashoffset: 1200;
-    stroke-width: 3.2;
-    opacity: 0.95;
-  }
-  52% {
-    stroke-dashoffset: 0;
-    stroke-width: 4;
-    opacity: 0.95;
-  }
-  74% {
-    stroke-dashoffset: 0;
-    stroke-width: 3.8;
-    opacity: 0.95;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    stroke-width: 3.8;
-    opacity: 0;
-  }
-}
-/* the crayon tip itself, riding the path in step with the stroke it lays down
-   (motion comes from <animateMotion>; this is just how the nub looks) */
-.pencil-edge__nub {
-  fill: var(--butter);
-  stroke: #b37f16;
-  stroke-width: 1.6;
-  filter: drop-shadow(0 1.5px 2.5px rgba(74, 71, 84, 0.32));
-  animation: nub-lift 2.6s linear infinite;
-}
-/* animate `r`, not `transform` — <animateMotion> owns this element's transform
-   and the two would fight */
-@keyframes nub-lift {
-  0% { opacity: 0; r: 2.4; }
-  6% { opacity: 1; r: 4.4; }
-  52% { opacity: 1; r: 4.4; }
-  74% { opacity: 0.9; r: 5.4; }
-  90%, 100% { opacity: 0; r: 2.8; }
+  opacity: 0.95;
 }
 
 /* ---------- gates (a pinned note) ---------- */
@@ -1656,51 +1611,6 @@ body {
   to {
     opacity: 1;
     transform: translateY(0) rotate(-0.6deg);
-  }
-}
-
-/* ---------- paper-plane flyby (run kicked off) ---------- */
-.plane-flyby {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 4;
-  pointer-events: none;
-  animation: plane-flight 2.4s cubic-bezier(0.3, 0.6, 0.6, 1) forwards;
-}
-.plane-flyby__icon {
-  width: 46px;
-  height: 46px;
-  transform: rotate(8deg);
-  filter: drop-shadow(2px 3px 0 rgba(74, 71, 84, 0.18));
-}
-.plane-flyby__icon path {
-  fill: var(--paper);
-  stroke: var(--ink);
-  stroke-width: 2;
-  stroke-linejoin: round;
-}
-.plane-flyby__icon .fold {
-  fill: none;
-  stroke-width: 1.5;
-}
-@keyframes plane-flight {
-  0% {
-    transform: translate(-70px, 78vh) rotate(4deg);
-    opacity: 0;
-  }
-  8% {
-    opacity: 1;
-  }
-  45% {
-    transform: translate(42vw, 30vh) rotate(-5deg);
-  }
-  75% {
-    transform: translate(75vw, 22vh) rotate(6deg);
-  }
-  100% {
-    transform: translate(108vw, -8vh) rotate(2deg);
-    opacity: 1;
   }
 }
 

@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
   getBezierPath,
   Handle,
-  MarkerType,
   Position,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useUpdateNodeInternals,
   type Edge,
   type EdgeProps,
   type Node,
@@ -21,10 +21,6 @@ import "@xyflow/react/dist/style.css";
 import { applyLayout } from "../layout";
 import { effectiveHarness, useConfig } from "../harness";
 import { STATUS_META, type DagResponse, type LayoutKind, type TaskStatus } from "../types";
-
-const ARROW_COLOR = "#6f6757";
-const ARROW_RUN = "#d9950f";
-const ARROW_DONE = "#4f9e5d";
 
 /** Deterministic PRNG so each node's scribble stays stable across polls. */
 function mulberry32(seed: number) {
@@ -174,6 +170,7 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
   const meta = STATUS_META[data.status];
   const isTB = data.dir === "TB";
   const alive = data.status === "ready" || data.status === "dispatched";
+  const updateNodeInternals = useUpdateNodeInternals();
   // one unbroken colouring pass, chopped into back-and-forth zigzag legs.
   // The legs draw strictly one after another (leg N+1 starts when N lands),
   // hold, then a fade wave erases them oldest-first, and the svg remounts.
@@ -202,6 +199,15 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
         .filter(Boolean)
         .join(" ")}
       data-status={data.status}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget && event.animationName === "node-in") {
+          // React Flow may take its first handle measurement while the card is
+          // still scaled down by `node-in`. Transforms do not trigger its
+          // ResizeObserver when they settle, so explicitly replace those
+          // temporary, inset handle coordinates with the final geometry.
+          updateNodeInternals(id);
+        }
+      }}
       style={
         {
           "--crayon": meta.color,
@@ -301,15 +307,45 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
 const nodeTypes = { task: TaskNode };
 
 /**
- * Edge leaving a running node: a faint dashed pencil sketch that is traced
- * over by a solid pencil stroke, source → target, over and over. Two stacked
- * paths share one geometry; the wobble lives in the #pencil-edge filter
- * (userSpaceOnUse, so zero-height horizontal edges don't collapse it).
+ * Edge leaving a running node: a faint dashed pencil sketch that a solid
+ * pencil stroke traces over, source → target, like a hand inking in the
+ * dashes — over and over. Two stacked paths share one geometry; the wobble
+ * lives in the #pencil-edge filter (userSpaceOnUse, with a 24000² region so
+ * nothing clips, and scale 4.5, so it never truncates the advancing tip).
  *
- * A crayon nub rides the same geometry via <animateMotion>, timed to the draw
- * so it reads as the tip laying the stroke down. It sits OUTSIDE the filtered
- * group on purpose — the wobble belongs to the line, the nub stays crisp.
+ * Motion is FIXED-SPEED + UNIFORM: each edge is measured (getTotalLength) and
+ * its draw time is length / EDGE_DRAW_SPEED, so every edge advances at the
+ * same constant rate — no easing curves, and different-length edges simply
+ * take different amounts of time.
+ *
+ * Driven by the Web Animations API (element.animate), NOT a hand-rolled
+ * requestAnimationFrame loop. A rAF loop here has a structural weakness that
+ * produced the "draws short, then restarts" / "fast start" failure: it pinned
+ * its `start` timestamp to mount and read a `lenRef` that a SEPARATE effect
+ * silently swapped whenever the path geometry changed, so any post-mount
+ * geometry change (a node drag, a layout switch, or React Flow re-emitting
+ * handle coords with sub-pixel drift) recomputed `t = (now-start) % cycle`
+ * against a NEW length but the OLD `start` — stranding the trace mid-cycle.
+ * WAAPI runs on the browser's animation timeline (immune to React re-render
+ * storms: the 2s status polls, fitView viewport tweens, node drags). The node
+ * reconciliation below preserves React Flow's `measured` state across polls;
+ * without it React Flow briefly drops every handle, unmounts every edge, and
+ * necessarily restarts all WAAPI animations together. Each surviving edge
+ * is rebuilt only when its MEASURED length actually changes — sub-pixel drift
+ * in the `path` string across polls is ignored, so every edge keeps its own
+ * independent loop and a short edge looping fast never re-syncs the others.
+ * Pure CSS can't express per-edge timing
+ * here either (pathLength normalisation and var()/calc() inside @keyframes are
+ * both unreliable in the target browser), so JS measures the length and hands
+ * concrete numbers to WAAPI.
  */
+/** uniform pencil draw speed, px per ms (150 px/s) */
+const EDGE_DRAW_SPEED = 0.15;
+/** how long a finished line is held before it lifts, ms */
+const EDGE_HOLD_MS = 500;
+/** how long the finished line takes to fade before the next pass, ms */
+const EDGE_FADE_MS = 600;
+
 function PencilEdge(props: EdgeProps) {
   const [path] = getBezierPath({
     sourceX: props.sourceX,
@@ -319,34 +355,81 @@ function PencilEdge(props: EdgeProps) {
     targetY: props.targetY,
     targetPosition: props.targetPosition,
   });
-  const pathId = `pe-${props.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const drawRef = useRef<SVGPathElement | null>(null);
+  // The live WAAPI Animation and the path length it was built from. Kept in
+  // refs (not derived from the effect's return) so a re-render that merely
+  // re-emits the same geometry does NOT tear the animation down.
+  const animRef = useRef<Animation | null>(null);
+  const lenRef = useRef(0);
+
+  // Build ONE animation per edge, then leave it running on its own timeline.
+  // Each edge is independent: its draw time is its own length / EDGE_DRAW_SPEED,
+  // so a short edge loops fast and a long edge loops slow — they never re-sync.
+  //
+  // React Flow can re-emit path geometry while nodes settle, and `path` can
+  // drift by sub-pixel floats even when the real geometry is unchanged. If we
+  // rebuilt on every path string, those harmless changes would restart the
+  // affected animation. Instead we rebuild ONLY when the measured length
+  // actually changed (by > 1px); sub-pixel drift is ignored, so each edge keeps
+  // playing its own loop. The effect deliberately returns NO cleanup —
+  // React's per-render cleanup would defeat the lenRef guard — so the previous
+  // Animation is cancelled manually only when we genuinely rebuild, and the
+  // separate effect below cancels it on unmount / type-flip away from `pencil`.
+  useLayoutEffect(() => {
+    const el = drawRef.current;
+    if (!el) return;
+    const L = el.getTotalLength();
+    if (!isFinite(L) || L <= 0) {
+      // degenerate geometry (e.g. source/target not yet positioned): hide the
+      // draw path; the next real geometry will rebuild the animation.
+      animRef.current?.cancel();
+      animRef.current = null;
+      el.style.opacity = "0";
+      lenRef.current = 0;
+      return;
+    }
+    const running = animRef.current && animRef.current.playState === "running";
+    if (running && Math.abs(L - lenRef.current) < 1) return; // unchanged → keep looping
+    // genuine length change (drag / layout switch / node count change) or no
+    // animation yet → (re)build from the source with a fresh timeline.
+    animRef.current?.cancel();
+    lenRef.current = L;
+    // dasharray: draw exactly one path-length, then gap one path-length, so a
+    // 0 dashoffset shows the whole line and an L dashoffset hides it entirely.
+    el.style.strokeDasharray = `${L} ${L}`;
+    el.style.opacity = ""; // WAAPI's keyframes own the opacity from here
+    const drawMs = L / EDGE_DRAW_SPEED; // longer edge ⇒ proportionally longer draw
+    const total = drawMs + EDGE_HOLD_MS + EDGE_FADE_MS;
+    animRef.current = el.animate(
+      [
+        // pen at the source, line hidden (offset = L), full ink
+        { strokeDashoffset: L, opacity: 0.95, offset: 0 },
+        // draw phase: offset falls linearly to 0 — the revealed length grows at
+        // a constant rate and lands exactly on the target at this keyframe
+        { strokeDashoffset: 0, opacity: 0.95, offset: drawMs / total },
+        // hold: finished line sits, still full ink
+        { strokeDashoffset: 0, opacity: 0.95, offset: (drawMs + EDGE_HOLD_MS) / total },
+        // fade: line lifts (opacity → 0) before the pass snaps back to the start
+        { strokeDashoffset: 0, opacity: 0, offset: 1 },
+      ],
+      { duration: total, easing: "linear", iterations: Infinity },
+    );
+  }, [path]);
+
+  // Cancel on unmount / when the edge type flips away from `pencil`. The layout
+  // effect above does NOT return a cleanup (it would tear the animation down on
+  // every path re-emit); this is the only place the Animation is freed.
+  useEffect(() => () => animRef.current?.cancel(), []);
+
   return (
-    <>
-      <g className="pencil-edge">
-        <path id={pathId} className="pencil-edge__sketch" d={path} fill="none" />
-        <path className="pencil-edge__draw" d={path} fill="none" markerEnd={props.markerEnd} />
-      </g>
-      <circle className="pencil-edge__nub" r="3.6">
-        {/* hold at the target between passes: 0→1 over the draw, then parked */}
-        <animateMotion
-          dur="2.6s"
-          repeatCount="indefinite"
-          calcMode="linear"
-          keyPoints="0;1;1;1"
-          keyTimes="0;0.52;0.74;1"
-        >
-          <mpath href={`#${pathId}`} />
-        </animateMotion>
-      </circle>
-    </>
+    <g className="pencil-edge">
+      <path className="pencil-edge__sketch" d={path} fill="none" />
+      <path ref={drawRef} className="pencil-edge__draw" d={path} fill="none" />
+    </g>
   );
 }
 
 const edgeTypes = { pencil: PencilEdge };
-
-/** Event fired (on window) when the user hits "让 Orca 执行" — the canvas
-    celebrates with a paper-plane flyby. */
-export const RUN_START_EVENT = "orca:run-start";
 
 const CONFETTI_COLORS = ["#7bb7e0", "#f2a0a6", "#7fc98c", "#f0b94e", "#ea6b5e", "#b79fe0"];
 
@@ -387,18 +470,6 @@ function Confetti() {
   );
 }
 
-/** A paper plane soaring bottom-left → top-right; one mount = one flight. */
-function PaperPlane({ onDone }: { onDone: () => void }) {
-  return (
-    <div className="plane-flyby" onAnimationEnd={onDone} aria-hidden="true">
-      <svg viewBox="0 0 40 40" className="plane-flyby__icon">
-        <path d="M2,22 L38,4 L16,38 L13,25 Z" />
-        <path className="fold" d="M13,25 L38,4" />
-      </svg>
-    </div>
-  );
-}
-
 function Flow({
   dag,
   selectedId,
@@ -427,15 +498,6 @@ function Flow({
   const seenDag = useRef<DagResponse | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<TaskNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  // increments per run-start event; the mounted plane unmounts itself at the
-  // end of its flight
-  const [flight, setFlight] = useState(0);
-
-  useEffect(() => {
-    const onRunStart = () => setFlight((n) => n + 1);
-    window.addEventListener(RUN_START_EVENT, onRunStart);
-    return () => window.removeEventListener(RUN_START_EVENT, onRunStart);
-  }, []);
 
   // Switching layout algorithm or asking for a re-org discards manual drags so
   // the graph snaps fully to the fresh auto-layout. Declared before the layout
@@ -483,7 +545,6 @@ function Flow({
       const done = from === "completed";
       // an edge carries the state of the dependency it represents: satisfied
       // (inked green), being worked on (pencil-traced), or not yet reached
-      const tone = running ? ARROW_RUN : done ? ARROW_DONE : ARROW_COLOR;
       return {
         id: e.id,
         source: e.source,
@@ -491,18 +552,30 @@ function Flow({
         // pencil-sketch the link out of a node that is currently running
         type: running ? "pencil" : undefined,
         className: running ? "edge--run" : done ? "edge--done" : "edge--idle",
-        markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15, color: tone },
       };
     });
     const laid = applyLayout(layout, rawNodes, rawEdges);
 
     setNodes((cur) => {
-      const curPos = new Map(cur.map((n) => [n.id, n.position]));
+      const currentById = new Map(cur.map((n) => [n.id, n]));
       return laid.nodes.map((n) => {
+        const current = currentById.get(n.id);
         const keep =
           dragged.current.get(n.id) ??
-          (draggingId.current === n.id ? curPos.get(n.id) : undefined);
-        return keep ? { ...n, position: keep } : n;
+          (draggingId.current === n.id ? current?.position : undefined);
+
+        // `setNodes` receives brand-new user-node objects on every status poll.
+        // In React Flow, a new object without `measured` means "re-initialize
+        // this node": its cached handle bounds are cleared until ResizeObserver
+        // measures it again. During that gap every connected EdgeWrapper returns
+        // null, unmounting the custom edge and restarting its WAAPI animation.
+        // Carrying the library-owned dimensions tells React Flow this is the
+        // same measured node, so handles and edge DOM survive ordinary polls.
+        return {
+          ...n,
+          position: keep ?? n.position,
+          measured: current?.measured,
+        };
       });
     });
     setEdges(laid.edges);
@@ -572,7 +645,6 @@ function Flow({
         <Background variant={BackgroundVariant.Lines} gap={30} color="rgba(96,132,178,0.085)" />
         <Controls showInteractive={false} />
       </ReactFlow>
-      {flight > 0 && <PaperPlane key={flight} onDone={() => setFlight(0)} />}
       {allDone && <Confetti />}
     </>
   );
