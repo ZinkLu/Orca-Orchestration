@@ -106,7 +106,7 @@ orca orchestration run-use --id <run_id> --json     # 重新把自己绑为 coor
 - 聚焦**规划 + 建图**。执行交给 viewer（coordinator）。
 - **改不了已建任务的描述**：`orca orchestration task-update` 只能改 `--status` / `--result`，**没有改 spec/标题/依赖的接口**，也没有删除单个任务的命令。建图时尽量一次写对。
 - **要重绘 DAG 就开新 Run，不要用 `reset`。** `orca orchestration reset --tasks` **没有 `--run` 作用域**，它清的是本地整个编排数据库 —— 会连别的 Run 的任务一起删掉。正确做法是 `run-create` 开一个新 Run 重建，旧 Run 留着当历史。
-- **决策门是 Run 作用域的**：`gate-list` / `gate-resolve` 要带 `--run`，或者由当前绑定的 coordinator 调用。
+- **决策门是 Run 作用域的，但读写 flag 不一样**：`gate-list`（读）带 `--run <id>`；`gate-resolve`（写）**没有 `--run`**——它靠 `--from <handle>`（绑到该 Run 的 coordinator 终端）+ 全局唯一的 `--id` 定位。所以 viewer 先 `run-use` 把 coordinator 绑到 Run，再用 `--from` 去 resolve。
 - **`orca orchestration run` / `run-stop` / `coordinator-start` / `coordinator-stop` 已退休**，调用它们不会有任何效果，只会返回一段"去读 orchestration skill"的提示。不要用。
 - 不执行破坏性或与规划无关的系统命令。
 

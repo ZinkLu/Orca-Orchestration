@@ -185,7 +185,7 @@ app.post("/api/gates/:id/resolve", async (req, res) => {
     return;
   }
   try {
-    await asCoordinator(runId, (from) => resolveGate(req.params.id, resolution, runId, from));
+    await asCoordinator(runId, (from) => resolveGate(req.params.id, resolution, from));
     res.json({ ok: true });
   } catch (err) {
     fail(res, err);
@@ -264,11 +264,37 @@ app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`Orca DAG viewer → ${url}`);
   console.log(`Workspace dir: ${WORKSPACE_DIR} (worktree: ${WORKTREE})`);
-  if (servingUI && process.env.NO_OPEN !== "1") openBrowser(url);
+  if (servingUI && process.env.NO_OPEN !== "1") void openBrowser(url);
 });
 
-/** Best-effort "open my default browser at this URL", per platform. Never throws. */
-function openBrowser(url: string): void {
+/**
+ * Open the viewer URL. Prefers an Orca built-in browser tab (`orca tab create`)
+ * so the DAG lives inside the Orca window next to the terminals/workers it
+ * drives; falls back to the OS default browser when Orca isn't reachable (dev
+ * from a non-worktree dir, Orca not yet open, tab creation refused). Best-effort:
+ * never throws — the URL is already logged above.
+ */
+async function openBrowser(url: string): Promise<void> {
+  // `tab create` resolves the current worktree from cwd, so it works wherever
+  // the viewer runs inside an Orca-managed project. Fails fast if the runtime
+  // isn't up — then we drop to the system browser below.
+  try {
+    const created = await runOrca<{ browserPageId?: string }>(["tab", "create", "--url", url]);
+    // `tab create` makes the new tab the active one, but does NOT raise the
+    // Orca window to the foreground. `tab switch --focus` reveals the window
+    // (and the tab), so the DAG shows up in front instead of behind something.
+    const pageId = created?.browserPageId;
+    if (pageId) {
+      try {
+        await runOrca(["tab", "switch", "--page", pageId, "--focus"]);
+      } catch {
+        // Tab is created and active; only the window-raise failed — leave it.
+      }
+    }
+    return;
+  } catch {
+    // Orca not running / not a worktree / tab refused — fall through.
+  }
   const cmd =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
   const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];

@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const pExecFile = promisify(execFile);
 
@@ -319,11 +322,19 @@ export async function showDispatch(dispatchId: string): Promise<OrcaDispatch | n
 
 // --- Mutations (all need `--from <coordinator handle>`) --------------------
 
-/** Resolve a decision gate. Mutating: needs the bound coordinator terminal. */
+/**
+ * Resolve a decision gate. Mutating: needs the bound coordinator terminal.
+ *
+ * `gate-resolve` takes NO `--run` flag — unlike the READS (`task-list`,
+ * `gate-list`), mutations resolve their Run scope from the bound `--from`
+ * terminal, not from `--run`. The gate id (`--id`) is globally unique. Passing
+ * `--run` here used to be rejected with `Unknown flag --run`, which broke every
+ * human approval. The Run binding itself is established upstream by
+ * `asCoordinator` → `bindRun(runId, handle)` before this is called.
+ */
 export async function resolveGate(
   gateId: string,
   resolution: string,
-  runId: string,
   from: string,
 ): Promise<void> {
   await runOrca([
@@ -333,11 +344,49 @@ export async function resolveGate(
     gateId,
     "--resolution",
     resolution,
+    "--from",
+    from,
+  ]);
+}
+
+/**
+ * Update a task's status (and, optionally, its result JSON). Mutating: needs
+ * the bound coordinator terminal (`--from`).
+ *
+ * This exists for the one transition Orca does NOT drive itself: a task left
+ * `blocked` after its entry gate was approved. `gate-resolve` records the
+ * approval but does not flip the gated task out of `blocked` — and an approval
+ * done through the viewer's throwaway coordinator terminal (see `asCoordinator`
+ * in index.ts) closes that terminal before any unblock side-effect can land on
+ * a live consumer, so the task stays `blocked` and the dispatch loop sees zero
+ * `ready` tasks. The bound coordinator (which is alive for the whole run) has
+ * to nudge it to `ready` itself. A `rejected` gate is left alone here — that's
+ * a task-failure decision the caller should make explicitly.
+ *
+ * `--run` IS a valid flag for `task-update` (unlike `gate-resolve`), so we pass
+ * it for explicit scope alongside the `--from` authority.
+ */
+export async function taskUpdate(
+  taskId: string,
+  status: TaskStatus,
+  runId: string,
+  from: string,
+  result?: string,
+): Promise<void> {
+  const args = [
+    "orchestration",
+    "task-update",
+    "--id",
+    taskId,
+    "--status",
+    status,
     "--run",
     runId,
     "--from",
     from,
-  ]);
+  ];
+  if (result !== undefined) args.push("--result", result);
+  await runOrca(args);
 }
 
 // --- Terminals -------------------------------------------------------------
@@ -500,6 +549,86 @@ export async function startSupervisedWorker(opts: {
 }
 
 /**
+ * opencode workaround, verified end-to-end against Orca on 2026-08-10.
+ *
+ * `worker-start --agent opencode` opens the opencode TUI but does not reliably
+ * land the injected preamble (orca #9951) — the app opens with no prompt and
+ * never executes. The generic TUI-injection that `startLegacyWorker` uses is
+ * the same unreliable channel, so opencode gets its own path:
+ *
+ *   1. create a BARE SHELL terminal (NOT the opencode TUI),
+ *   2. dispatch for tracking only (no `--inject`) to mint a real dispatch_id,
+ *   3. fetch the preamble — it now carries that real dispatch_id AND the
+ *      worker handle as `--from`, both required for worker_done to settle,
+ *   4. run `opencode run --auto "$(cat <preamble-file>)"` in the shell.
+ *
+ * opencode executes the preamble's `orca orchestration send --type worker_done`
+ * via its Bash tool, settling the task (`completed`), which the coordinator
+ * loop picks up from task-list. `--auto` is REQUIRED: opencode's default
+ * permission policy auto-rejects tool calls (e.g. writing outside the project)
+ * and silently kills the task otherwise — the same class of quirk as
+ * `claude --dangerously-skip-permissions` above.
+ */
+async function startOpencodeWorker(opts: {
+  taskId: string;
+  runId: string;
+  from: string;
+  worktree?: string;
+}): Promise<StartedWorker> {
+  const created = await runOrca<{ terminal?: { handle?: string } }>([
+    "terminal",
+    "create",
+    "--worktree",
+    opts.worktree ?? "active",
+    "--command",
+    "/bin/zsh",
+  ]);
+  const handle = created.terminal?.handle;
+  if (!handle) throw new OrcaCliError("orca terminal create 未返回 worker handle (opencode)");
+
+  // Dispatch for tracking only (no --inject). This mints a real dispatch_id,
+  // without which the preamble below would still carry the ctx_preview
+  // placeholder and worker_done could never settle.
+  await runOrca([
+    "orchestration",
+    "dispatch",
+    "--task",
+    opts.taskId,
+    "--to",
+    handle,
+    "--run",
+    opts.runId,
+    "--from",
+    opts.from,
+  ]);
+
+  // Fetch the preamble. After the tracking dispatch it embeds the real
+  // dispatch_id and the worker handle (`--from <handle>`), which the worker
+  // process must echo back for worker_done to be accepted.
+  const shown = await runOrca<{ preamble?: string }>([
+    "orchestration",
+    "dispatch-show",
+    "--task",
+    opts.taskId,
+    "--preamble",
+    "--from",
+    opts.from,
+  ]);
+  if (!shown.preamble) throw new OrcaCliError("orca dispatch-show 未返回 preamble (opencode)");
+
+  // Write the preamble to a temp file and pass it as ONE shell argument via
+  // "$(cat ...)". Embedding the multiline preamble directly would put it
+  // through shell quoting/escaping hell; reading it from a file keeps it byte
+  // for byte intact.
+  const preambleFile = join(tmpdir(), `orca-preamble-${opts.taskId}.txt`);
+  await writeFile(preambleFile, shown.preamble);
+  const cmd = `opencode run --auto "$(cat ${preambleFile})"`;
+  await runOrca(["terminal", "send", "--terminal", handle, "--text", cmd, "--enter"]);
+
+  return { mode: "legacy", dispatchId: null, handle };
+}
+
+/**
  * Fallback for harnesses Orca does not know as a configured TUI agent (custom
  * commands, or anything `worker-start` rejects with `agent_unconfigured`).
  *
@@ -507,6 +636,10 @@ export async function startSupervisedWorker(opts: {
  * its TUI, then dispatch. `--inject` needs Orca to recognize a running agent in
  * the pane; when it doesn't, we fall back to dispatching for tracking only and
  * typing the preamble in ourselves.
+ *
+ * opencode is handled specially (see `startOpencodeWorker`): its TUI does not
+ * accept the injected preamble, so it runs `opencode run --auto` in a bare
+ * shell instead.
  */
 export async function startLegacyWorker(opts: {
   taskId: string;
@@ -515,6 +648,9 @@ export async function startLegacyWorker(opts: {
   from: string;
   worktree?: string;
 }): Promise<StartedWorker> {
+  if (opts.harness === "opencode") {
+    return startOpencodeWorker(opts);
+  }
   const created = await runOrca<{ terminal?: { handle?: string } }>([
     "terminal",
     "create",

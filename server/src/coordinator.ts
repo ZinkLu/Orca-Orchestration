@@ -3,11 +3,13 @@ import {
   bindRun,
   closeTerminal,
   ensureCoordinatorTerminal,
+  listGates,
   listTasks,
   showDispatch,
   startLegacyWorker,
   startSupervisedWorker,
   stopSupervisedWorker,
+  taskUpdate,
   type OrcaTask,
   type StartedWorker,
 } from "./orca";
@@ -179,7 +181,7 @@ async function loop(): Promise<void> {
 async function tick(): Promise<void> {
   const opts = state.opts!;
   const runId = state.runId!;
-  const tasks = await listTasks(runId);
+  let tasks = await listTasks(runId);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   state.lastTick = Date.now();
 
@@ -204,6 +206,33 @@ async function tick(): Promise<void> {
       }
     }),
   );
+
+  // Release any task still `blocked` whose entry gate has already been
+  // approved. Orca records the gate resolution but does NOT flip the gated
+  // task out of `blocked` — and an approval done through the viewer's
+  // throwaway coordinator terminal (see `asCoordinator` in index.ts) closes
+  // that terminal before the unblock side-effect can land on a live consumer,
+  // so the task stays `blocked` and the loop below would otherwise see zero
+  // `ready` tasks and stop on the first tick. As the bound consumer (alive
+  // for the whole run) we nudge it to `ready` ourselves. `rejected` gates are
+  // left `blocked` — turning those into `failed` is a caller's call, not ours.
+  const blocked = tasks.filter((t) => t.status === "blocked");
+  if (blocked.length > 0) {
+    const gates = await listGates(runId);
+    const approvedTaskIds = new Set(
+      gates
+        .filter((g) => g.taskId && g.status === "resolved" && g.resolution === "approved")
+        .map((g) => g.taskId!),
+    );
+    const toRelease = blocked.filter((t) => approvedTaskIds.has(t.id));
+    if (toRelease.length > 0) {
+      await Promise.all(
+        toRelease.map((t) => taskUpdate(t.id, "ready", runId, state.coordinatorHandle!)),
+      );
+      // re-read so this same tick dispatches the freshly-released tasks
+      tasks = await listTasks(runId);
+    }
+  }
 
   const ready = tasks.filter((t) => t.status === "ready");
   const inFlight = tasks.filter((t) => t.status === "dispatched").length;
@@ -247,19 +276,12 @@ async function startOne(
   const from = state.coordinatorHandle!;
   try {
     let started: StartedWorker;
-    try {
-      started = await startSupervisedWorker({
-        taskId: task.id,
-        agent: attempt.harness,
-        runId,
-        from,
-        worktree: "current",
-      });
-    } catch (err) {
-      // A harness Orca doesn't know as a configured TUI agent (or a custom
-      // command) can't go through worker-start — compose it by hand instead.
-      const code = (err as OrcaCliError).code;
-      if (!code || !UNCONFIGURED_AGENT_CODES.has(code)) throw err;
+    // opencode's TUI does not reliably accept `worker-start`'s injected
+    // preamble (orca #9951) even though orca recognizes it as an agent — the
+    // app opens with no prompt and never runs. Route it straight through the
+    // legacy path, which runs `opencode run --auto` in a bare shell instead of
+    // pasting into the TUI (verified 2026-08-10).
+    if (attempt.harness === "opencode") {
       started = await startLegacyWorker({
         taskId: task.id,
         harness: attempt.harness,
@@ -267,6 +289,28 @@ async function startOne(
         from,
         worktree: opts.worktree,
       });
+    } else {
+      try {
+        started = await startSupervisedWorker({
+          taskId: task.id,
+          agent: attempt.harness,
+          runId,
+          from,
+          worktree: "current",
+        });
+      } catch (err) {
+        // A harness Orca doesn't know as a configured TUI agent (or a custom
+        // command) can't go through worker-start — compose it by hand instead.
+        const code = (err as OrcaCliError).code;
+        if (!code || !UNCONFIGURED_AGENT_CODES.has(code)) throw err;
+        started = await startLegacyWorker({
+          taskId: task.id,
+          harness: attempt.harness,
+          runId,
+          from,
+          worktree: opts.worktree,
+        });
+      }
     }
     attempt.mode = started.mode;
     attempt.dispatchId = started.dispatchId;
