@@ -34,10 +34,10 @@ export function DoodleSelect({
   value,
   onChange,
   options,
-  placeholder = "请选择",
+  placeholder = "Select…",
   disabled = false,
   loading = false,
-  emptyText = "没有选项",
+  emptyText = "No options",
   size = "md",
   className,
   title,
@@ -47,7 +47,7 @@ export function DoodleSelect({
   options: DoodleOption[];
   placeholder?: string;
   disabled?: boolean;
-  /** Async list not here yet — shows 加载中… instead of the empty state. */
+  /** Async list not here yet — shows "Loading…" instead of the empty state. */
   loading?: boolean;
   emptyText?: string;
   /** sm for the toolbars, md (full width) for panels. */
@@ -231,16 +231,16 @@ export function DoodleSelect({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="搜索…"
-                aria-label="搜索选项"
+                placeholder="Search…"
+                aria-label="Search options"
                 spellCheck={false}
               />
             </div>
             <div className="doodle-select__options" ref={listRef} style={{ maxHeight: pos.listMaxH }}>
               {loading ? (
-                <div className="doodle-select__empty">加载中…</div>
+                <div className="doodle-select__empty">Loading…</div>
               ) : filtered.length === 0 ? (
-                <div className="doodle-select__empty">{query ? "没有匹配的选项" : emptyText}</div>
+                <div className="doodle-select__empty">{query ? "No matches" : emptyText}</div>
               ) : (
                 filtered.map((o, i) => (
                   <div

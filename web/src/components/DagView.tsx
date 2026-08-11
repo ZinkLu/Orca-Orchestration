@@ -256,7 +256,7 @@ function TaskNode({ id, data }: NodeProps<Node<TaskNodeData>>) {
           <span className="dot" style={{ background: meta.color }} />
           {meta.label}
         </div>
-        <span className="task-node__harness" title="这个节点的 harness">
+        <span className="task-node__harness" title="This node's harness">
           {data.harness}
         </span>
       </div>
@@ -610,11 +610,13 @@ function Flow({
     return (
       <div className="dag-empty">
         <div className="dag-empty__doodle">🖍️</div>
-        <div className="dag-empty__title">还是一张白纸</div>
+        <div className="dag-empty__title">A blank page, for now</div>
         <div className="dag-empty__hint">
-          在你的 agent 里加载 <code>orca-dag</code> skill，聊需求让它拆解并建图。
+          Load the <code>orca-dag</code> skill in your agent and talk through what you want to
+          build — it will break the work down and draw the graph.
           <br />
-          任务和依赖会像蜡笔一样，在这里一笔笔长成一张 DAG —— 然后逐个选 harness 派发。
+          Tasks and deps grow here stroke by stroke, like crayon — then pick a harness per node and
+          fire.
         </div>
       </div>
     );

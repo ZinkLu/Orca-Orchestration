@@ -442,7 +442,7 @@ export async function ensureCoordinatorTerminal(worktree = "active"): Promise<st
     COORDINATOR_TITLE,
   ]);
   const handle = created.terminal?.handle;
-  if (!handle) throw new OrcaCliError("orca terminal create 未返回 coordinator handle");
+  if (!handle) throw new OrcaCliError("orca terminal create returned no coordinator handle");
   return handle;
 }
 
@@ -463,7 +463,7 @@ export async function createTempCoordinatorTerminal(worktree = "active"): Promis
     `${COORDINATOR_TITLE} · adhoc ${++tempSeq}`,
   ]);
   const handle = created.terminal?.handle;
-  if (!handle) throw new OrcaCliError("orca terminal create 未返回 adhoc handle");
+  if (!handle) throw new OrcaCliError("orca terminal create returned no adhoc handle");
   return handle;
 }
 
@@ -610,7 +610,7 @@ async function startOpencodeWorker(opts: {
     "/bin/zsh",
   ]);
   const handle = created.terminal?.handle;
-  if (!handle) throw new OrcaCliError("orca terminal create 未返回 worker handle (opencode)");
+  if (!handle) throw new OrcaCliError("orca terminal create returned no worker handle (opencode)");
 
   // Dispatch for tracking only (no --inject). This mints a real dispatch_id,
   // without which the preamble below would still carry the ctx_preview
@@ -640,7 +640,7 @@ async function startOpencodeWorker(opts: {
     "--from",
     opts.from,
   ]);
-  if (!shown.preamble) throw new OrcaCliError("orca dispatch-show 未返回 preamble (opencode)");
+  if (!shown.preamble) throw new OrcaCliError("orca dispatch-show returned no preamble (opencode)");
 
   // Write the preamble to a temp file and pass it as ONE shell argument via
   // "$(cat ...)". Embedding the multiline preamble directly would put it
@@ -691,7 +691,7 @@ export async function startLegacyWorker(opts: {
     harnessCommand(opts.harness),
   ]);
   const handle = created.terminal?.handle;
-  if (!handle) throw new OrcaCliError("orca terminal create 未返回 worker handle");
+  if (!handle) throw new OrcaCliError("orca terminal create returned no worker handle");
 
   try {
     await runOrca([

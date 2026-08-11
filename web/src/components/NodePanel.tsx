@@ -71,7 +71,7 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
 
   return (
     <aside className="node-panel">
-      <button className="node-panel__close" onClick={onClose} aria-label="关闭">
+      <button className="node-panel__close" onClick={onClose} aria-label="Close">
         ✕
       </button>
 
@@ -85,21 +85,21 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
       </div>
 
       <div className="node-panel__field">
-        <span className="node-panel__key">Harness（这个节点用哪个 agent）</span>
+        <span className="node-panel__key">Harness (which agent runs this node)</span>
         <DoodleSelect
           value={sel}
           onChange={pick}
           options={[
-            { value: INHERIT, label: `跟随默认（${getDefaultHarness()}）` },
+            { value: INHERIT, label: `Default (${getDefaultHarness()})` },
             ...HARNESSES.map((h) => ({ value: h, label: h })),
-            { value: CUSTOM, label: "自定义…" },
+            { value: CUSTOM, label: "Custom…" },
           ]}
         />
         {sel === CUSTOM && (
           <input
             className="node-panel__custom"
             value={custom}
-            placeholder="命令，如 aider"
+            placeholder="command, e.g. aider"
             onChange={(e) => pickCustom(e.target.value)}
           />
         )}
@@ -108,7 +108,7 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
       {picker !== "none" && (
         <div className="node-panel__field">
           <span className="node-panel__key">
-            Model（{effHarness}）{model ? null : " · 默认"}
+            Model ({effHarness}){model ? null : " · default"}
           </span>
           {picker === "select" ? (
             <DoodleSelect
@@ -116,7 +116,7 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
               onChange={(v) => setNodeModel(node.id, v || null)}
               loading={openCodeModels === null}
               options={[
-                { value: "", label: "（默认模型）" },
+                { value: "", label: "(default model)" },
                 ...(openCodeModels ?? []).map((m) => ({ value: m, label: m })),
               ]}
             />
@@ -124,7 +124,7 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
             <input
               className="node-panel__custom"
               value={model ?? ""}
-              placeholder={`模型名，如 ${effHarness === "claude" ? "opus" : effHarness === "codex" ? "o3" : "<model>"}`}
+              placeholder={`model name, e.g. ${effHarness === "claude" ? "opus" : effHarness === "codex" ? "o3" : "<model>"}`}
               onChange={(e) => setNodeModel(node.id, e.target.value.trim() || null)}
             />
           )}
@@ -135,28 +135,30 @@ export function NodePanel({ node, onClose }: { node: DagNode; onClose: () => voi
           these while the task is dispatched. */}
       {node.dispatchId && (
         <div className="node-panel__field">
-          <span className="node-panel__key">当前 Dispatch（本次尝试）</span>
+          <span className="node-panel__key">Current Dispatch (this attempt)</span>
           <div className="node-panel__id">
             <code>{node.dispatchId}</code>
           </div>
           {node.assigneeHandle && (
             <span className="node-panel__hint">
-              执行终端 <code>{node.assigneeHandle}</code> · 用{" "}
-              <code>orca orchestration worker-read --dispatch {node.dispatchId}</code> 看输出
+              Worker terminal <code>{node.assigneeHandle}</code> · inspect output with{" "}
+              <code>orca orchestration worker-read --dispatch {node.dispatchId}</code>
             </span>
           )}
         </div>
       )}
 
       <div className="node-panel__field">
-        <span className="node-panel__key">描述 / spec</span>
+        <span className="node-panel__key">Spec</span>
         <p className="node-panel__spec-ro">{node.spec}</p>
-        <span className="node-panel__hint">要改描述或依赖，让你的 agent 重绘 DAG（reset + 重建）。</span>
+        <span className="node-panel__hint">
+          To change the spec or deps, have your agent redraw the DAG in a fresh Run.
+        </span>
       </div>
 
       {node.result && (
         <div className="node-panel__field">
-          <span className="node-panel__key">结果</span>
+          <span className="node-panel__key">Result</span>
           <pre className="node-panel__result">{node.result}</pre>
         </div>
       )}

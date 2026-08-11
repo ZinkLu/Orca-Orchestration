@@ -1,153 +1,198 @@
 # Orca DAG — skill + viewer
 
-把「和 agent 聊天规划」与「可视化 + 执行」拆成两个独立模块：
+English | [简体中文](README_zh.md)
 
-1. **skill**（`skill/SKILL.md`）：教**你自己的 agent**（Claude Code / kimi / …）如何把一个需求拆成 **Orca orchestration 的任务 DAG**，以及建图规范。规划的"大脑"在你的 agent 里，**不内嵌 Claude Agent SDK**。
-2. **viewer**（`server/` + `web/`，编译成全局二进制 `orca-dag`）：连到 Orca 的编排状态，**实时可视化**这张 DAG；每个节点**各自选 harness**（claude / kimi / opencode / grok …），点 **「▶ 让 Orca 执行」**，viewer 内置的**自驱动 coordinator** 就按依赖把 ready 任务**并行**派发给按需拉起的自主 worker，直到整张图跑完。
+Split "planning by chatting with an agent" from "visualizing + executing" into two independent modules:
 
-> 核心流程：**agent 建图 → viewer 里选 Run、给节点选 harness → Run → 按 DAG 并行自动执行**。要改某个任务或依赖，就让 agent 重绘 DAG —— Orca 没有改单个任务的接口。
+1. **skill** (`skill/SKILL.md`): teaches **your own agent** (Claude Code / kimi / …) how to break a requirement down into an **Orca orchestration task DAG**, plus the graph-building conventions. The planning "brain" stays in your agent — **no embedded Claude Agent SDK**.
+2. **viewer** (`server/` + `web/`, compiled into the portable `orca-dag` binary): connects to Orca's orchestration state and **visualizes the DAG live**; each node **picks its own harness** (claude / kimi / opencode / grok …) and optionally a **model**; click **"▶ Run with Orca"** and the viewer's built-in **self-driven coordinator** dispatches ready tasks **in parallel** along the dependencies to autonomous workers spun up on demand, until the whole graph is done.
+
+> Core flow: **agent builds the graph → pick a Run and per-node harnesses in the viewer → Run → the DAG executes in dependency-parallel**. To change a task or a dependency, have the agent redraw the DAG — Orca has no interface for editing a single task.
 >
-> ⚠️ **需要 Orca ≥ 1.4.160。** 该版本（2026-07-29，PR #9925）重写了整个编排契约，本项目已适配，**不再兼容更早的 Orca**。
+> ⚠️ **Requires Orca ≥ 1.4.160.** That release (2026-07-29, PR #9925) rewrote the whole orchestration contract; this project targets it and **no longer supports older Orca**.
 >
-> ⚠️ 为什么 viewer 仍然自己当 coordinator：不是因为 `orca orchestration run` 有 bug —— 那个命令连同 `coordinator-start` 已被**正式退休**（调用无副作用，只返回"去读 skill"）。Orca 是**故意不做调度器**的，官方 skill 原话：*"Agents still choose placement and concurrency; Orca does not schedule workers."* 所以走 DAG 的循环归 viewer，但循环里**每一步**现在都用 Orca 自己的 Run / Task / Dispatch 原语。
+> ⚠️ Why the viewer still acts as its own coordinator: not because `orca orchestration run` is buggy — that command (along with `coordinator-start`) has been **officially retired** (calling it has no side effects; it just says "go read the skill"). Orca **deliberately ships no scheduler** — the official skill's words: *"Agents still choose placement and concurrency; Orca does not schedule workers."* So the DAG loop belongs to the viewer, but **every step** inside that loop now uses Orca's own Run / Task / Dispatch primitives.
 
-![蜡笔风：全宽 DAG + 默认 harness/最多并行/Run 工具条 + 每节点 harness 选择的只读节点详情](docs/screenshot.png)
+![Crayon-style viewer: full-width DAG, default-harness/max-parallel/Run toolbar, and a read-only node panel with per-node harness and model pickers](docs/screenshot.png)
 
-## 它是怎么工作的
+## How it works
 
 ```
-   你的 agent（加载 orca-dag skill）                 orca-dag viewer（全局二进制）
+   your agent (loads the orca-dag skill)          orca-dag viewer (portable binary)
  ┌───────────────────────────────┐             ┌──────────────────────────────┐
- │  和你聊需求 → 拆解 → 建图        │             │  轮询 task-list → 画 DAG        │
- │  Bash: orca orchestration      │             │  每节点选 harness              │
- │        task-create / gate-*    │             │  ▶ Run → 自驱动 coordinator     │
+ │  chat → decompose → build DAG │             │  poll task-list → draw DAG   │
+ │  Bash: orca orchestration     │             │  pick harness per node       │
+ │        task-create / gate-*   │             │  ▶ Run → self-driven         │
  └───────────────┬───────────────┘             └───────────────┬──────────────┘
-                 │  写编排状态                                     │  轮询 + dispatch --inject（并行）
-                 ▼                                               ▼
-        ┌──────────────────────────  Orca 编排状态  ──────────────────────────┐
-        │  tasks / deps / gates   ·   按需拉起的自主 worker（各节点的 harness）    │
-        └──────────────────────────────────────────────────────────────────┘
+                 │  writes orchestration state                 │  poll + worker-start (parallel)
+                 ▼                                             ▼
+        ┌────────────────────  Orca orchestration state  ────────────────────┐
+        │  tasks / deps / gates  ·  on-demand autonomous workers (per-node   │
+        │                           harness)                                 │
+        └─────────────────────────────────────────────────────────────────────┘
 ```
 
-1. 你在**自己的 agent** 里聊需求。agent 加载 `orca-dag` skill，先 `orca orchestration run-create` 开一个 **Run**，再用 `task-create --deps …` 把任务与依赖建进这个 Run。
-2. 打开 viewer（`orca-dag`）。顶栏选 Run，它每 2 秒轮询 `orca orchestration task-list --run <id> --json`，用 **dagre** 布局、**React Flow** 渲染，状态实时变色。
-3. 在 viewer 里给节点选 harness（或用一个默认 harness 兜底），设置"最多并行"，点 **「▶ 让 Orca 执行」**。
-4. viewer 的 **coordinator 循环**接管：先把自己的一个 Orca 终端绑定为该 Run 的 coordinator（拿写权限），然后每轮找出所有 `ready` 任务，**并行**调 `orca orchestration worker-start --task <id> --agent <harness>` —— 由 **Orca 自己**创建 worker 终端、等就绪、注入 dispatch，并返回一个 **Dispatch**（一次尝试）。worker 干完发 `worker_done --outcome` → Orca **自动**把 task 和 dispatch 置为完成/失败 → 依赖转 `ready` → 继续，直到全跑完，然后 `worker-stop` 回收。
-5. 要改计划：回到 agent 对话让它重绘 DAG。
+1. You chat in **your own agent**. It loads the `orca-dag` skill, opens a **Run** with `orca orchestration run-create`, then builds the tasks and dependencies into that Run via `task-create --deps …`.
+2. Open the viewer (`orca-dag`). Pick the Run in the top bar; it polls `orca orchestration task-list --run <id> --json` every 2 seconds, lays out with **dagre**, renders with **React Flow**, and recolors statuses live.
+3. In the viewer, pick a harness per node (or rely on a default fallback), set "Max parallel", and click **"▶ Run with Orca"**.
+4. The viewer's **coordinator loop** takes over: it binds one of its own Orca terminals as the Run's coordinator (gaining mutation authority), then on each tick finds every `ready` task and calls `orca orchestration worker-start --task <id> --agent <harness>` **in parallel** — **Orca itself** creates the worker terminal, waits for readiness, injects the dispatch, and returns a **Dispatch** (one attempt). The worker finishes with `worker_done --outcome` → Orca **automatically** marks the task and dispatch completed/failed → dependents flip to `ready` → repeat until the graph is done, then `worker-stop` reclaims the workers.
+5. To change the plan: go back to the agent conversation and have it redraw the DAG.
 
-### Run / Task / Dispatch 三层
+### The Run / Task / Dispatch layers
 
-| 层 | 是什么 | 谁维护 |
+| Layer | What it is | Owned by |
 |---|---|---|
-| **Run** | 命名空间 + coordinator 收件箱；同一时刻只有一个绑定的 coordinator（`consumer_generation` 做 fencing） | Orca |
-| **Task** | 工作项；`deps` 定义 DAG 边，`run_id` 归属 Run | Orca |
-| **Dispatch** | **一次尝试**（id 形如 `ctx_*`）；带 `failure_count`（3 次熔断）、心跳、pane 身份、能力凭证。重试产生新的 Dispatch | Orca |
-| 每节点 harness、画布坐标、默认 harness、最大并行、当前 Run | viewer 自己的偏好 | `.orca-dag.config.json` |
+| **Run** | Namespace + coordinator inbox; only one coordinator is bound at a time (`consumer_generation` does the fencing) | Orca |
+| **Task** | A unit of work; `deps` define the DAG edges, `run_id` scopes it to a Run | Orca |
+| **Dispatch** | **One attempt** (id shaped like `ctx_*`); carries `failure_count` (circuit-breaks at 3), heartbeats, pane identity, capability credentials. A retry mints a new Dispatch | Orca |
+| Per-node harness & model, canvas positions, default harness, max parallel, current Run | The viewer's own preferences | `.orca-dag.config.json` |
 
-Run 是命名空间，**不等于 DAG** —— 一个 Run 里可以躺多张互不相连的图。"一个 Run 一张图"是 `skill/SKILL.md` 里的约定，不是 Orca 的约束。
+A Run is a namespace, **not a DAG** — several unrelated graphs can live in one Run. "One Run = one DAG" is a convention from `skill/SKILL.md`, not an Orca constraint.
 
-### 权限模型（为什么 viewer 要占一个终端）
+### The authority model (why the viewer occupies a terminal)
 
-Orca 的所有编排调用都过 `resolveRunScope`：
+Every Orca orchestration call goes through `resolveRunScope`:
 
-- **读**（`task-list` / `gate-list`）只要带 `--run <id>` 就跳过 consumer 检查，**任何进程都能读**。viewer 的轮询只需要这个。
-- **写**（`dispatch` / `gate-resolve` / `task-create` / `worker-start`）要求调用方**就是当前绑定该 Run 的那个 Orca 终端**，靠 `--from <handle>` 解析出 pane 来比对。
+- **Reads** (`task-list` / `gate-list`) skip the consumer check as long as they pass `--run <id>` — **any process can read**. That's all the viewer's polling needs.
+- **Mutations** (`dispatch` / `gate-resolve` / `task-create` / `worker-start`) require the caller to **be the Orca terminal currently bound to that Run**, proven by resolving `--from <handle>` to a pane.
 
-viewer 是个普通进程，没有终端身份，所以写操作一律 `run_required`。解法是 viewer 自己开一个标题为 `orca-dag coordinator` 的 Orca 终端，`run-use` 绑定，然后所有写操作带 `--from`。**绑定会 fence 掉原来的 coordinator**（通常就是给你画图的那个 agent 终端），所以点执行前 viewer 会明确确认一次；agent 随时可以用 `orca orchestration run-use --id <run>` 抢回去。停止执行时 viewer 会关掉这个终端，把 Run 让出来。
+The viewer is an ordinary process with no terminal identity, so every mutation would fail with `run_required`. The fix: the viewer opens its own Orca terminal titled `orca-dag coordinator`, binds it with `run-use`, and passes `--from` on every mutation. **Binding fences the previous coordinator** (usually the agent terminal that drew your graph), so the viewer asks for explicit confirmation before starting; the agent can reclaim the Run anytime with `orca orchestration run-use --id <run>`. On stop, the viewer closes that terminal and releases the Run.
 
-## 前置条件
+## Prerequisites
 
-- **Orca ≥ 1.4.160**（`orca status --json` 里的 `result.runtime.appVersion`）。Run/Dispatch 契约是 1.4.160 引入的；更老的版本没有 `run-create` / `worker-start`，本 viewer 跑不了。
-- **编排实验特性已开启**：Settings → Experimental。
-- **Orca 运行中**：`orca status --json` 的 `result.runtime.state` 应为 `"ready"`；否则先 `orca open`。
-- **项目是 Orca 管理的 worktree**：加 worker / 执行都要求当前目录是 Orca 注册的 repo/worktree（否则 `orca terminal create` 会报 `selector_not_found`）。用 `orca repo add <path>` 或 `orca worktree …` 先纳管。
-- **一个能跑 skill 的 agent**（建图侧）：Claude Code、或任何能读 `SKILL.md` 并执行 Bash 的 agent。
-- **viewer 侧只依赖 `orca` CLI** —— 不需要 `claude`、不需要 `ANTHROPIC_API_KEY`。
-- **Bun**（可选，仅打二进制时需要）。**Node.js ≥ 20**（跑 dev / `npm start` 时需要）。
+- **Orca ≥ 1.4.160** (`result.runtime.appVersion` in `orca status --json`). The Run/Dispatch contract landed in 1.4.160; older versions lack `run-create` / `worker-start` and the viewer cannot run.
+- **The orchestration experimental feature is enabled**: Settings → Experimental.
+- **Orca is running**: `result.runtime.state` in `orca status --json` should be `"ready"`; otherwise run `orca open` first.
+- **The project is an Orca-managed worktree**: adding workers / executing requires the current directory to be a registered repo/worktree (else `orca terminal create` fails with `selector_not_found`). Register with `orca repo add <path>` or `orca worktree …`.
+- **An agent that can run the skill** (graph-building side): Claude Code, or anything that can read `SKILL.md` and run Bash.
+- **The viewer side depends only on the `orca` CLI** — no `claude`, no `ANTHROPIC_API_KEY`.
+- **Bun** (optional, only to build the binary). **Node.js ≥ 20** (for dev / `npm start`).
 
-## 模块 1 · 安装 skill
+## Module 1 · Install the skill
 
 ```bash
-ln -s "$PWD/skill" ~/.claude/skills/orca-dag      # 或直接拷贝到 agent 的 skills 目录
+ln -s "$PWD/skill" ~/.claude/skills/orca-dag      # or copy it into your agent's skills directory
 ```
 
-然后在 agent 里聊需求，它会按 `SKILL.md` 的规范把 DAG 建进 Orca，并提示你运行 `orca-dag` 打开 viewer。
+Then chat through your requirement in the agent. It builds the DAG into Orca per `SKILL.md` and tells you to run `orca-dag` to open the viewer.
 
-## 模块 2 · 运行 viewer
+## Module 2 · Run the viewer
 
-开发（前端 5173 + 后端 8787，vite 代理 /api）：
+Development (frontend :5173 + backend :8787, vite proxies /api):
 
 ```bash
 npm install
-npm run dev            # 打开 http://localhost:5173
+npm run dev            # open http://localhost:5173
 ```
 
-打成全局二进制（推荐，可在任意 Orca-managed 项目目录直接调用）：
+Build the portable binary (recommended — callable from any Orca-managed project directory):
 
 ```bash
-npm run build:binary                 # 产出 dist/orca-dag（约 60 MB，前端已内嵌）
-cp dist/orca-dag /usr/local/bin/     # 装到 PATH
+npm run build:binary                 # produces dist/orca-dag (~60 MB, frontend embedded)
+cp dist/orca-dag /usr/local/bin/     # put it on PATH
 
 cd ~/any/orca-managed/project
-orca-dag                             # 起在 http://localhost:8787，自动开浏览器；用当前目录当工作区
+orca-dag                             # serves http://localhost:8787, opens the browser; uses the cwd as workspace
 ```
 
-交叉编译（目标机自带 `orca` 即可）：`TARGET=bun-linux-x64 npm run build:binary`。
-开关：`PORT`（默认 8787）、`NO_OPEN=1`（不自动开浏览器）、`WORKSPACE_DIR`（覆盖 `active` worktree）。
+Cross-compile (the target machine only needs `orca`): `TARGET=bun-linux-x64 npm run build:binary`.
+Switches: `PORT` (default 8787), `NO_OPEN=1` (don't open the browser), `WORKSPACE_DIR` (overrides the `active` worktree).
 
-## viewer 能做什么
+## Quick start
 
-- **实时可视化** DAG，节点状态 `pending / ready / dispatched / completed / failed / blocked` 映射颜色；每个节点角上标着它的 harness。
-- **布局算法切换**：顶栏「布局」段控可切 **横向分层 / 纵向分层**（dagre / Sugiyama）与 **力导向**（Fruchterman–Reingold）；**↻ 重排** 一键重新自动布局（清除手动拖拽）。选择记忆到 localStorage。
-- **拖拽布局**：节点可自由拖动，位置在实时轮询刷新中保持不变（只有你没动过的节点跟随自动布局）。
-- **执行动画**：`dispatched`（执行中）节点用蜡笔斜纹从左上到右下一遍遍「涂鸦」；从执行中节点流出的连线先是游动的虚线草稿，再有铅笔笔触从本节点向下游一遍遍「描」成实线。
-- **每节点选 harness**：点节点在面板里选 `claude / kimi / opencode / grok / codex` 或自定义命令（持久化到 workspace 的 `.orca-dag.config.json`）；没单独设的节点用顶栏的**默认 harness** 兜底。
-- **▶ 让 Orca 执行 / ⏹ 停止** + **最多并行**：启动/停止 viewer 内置的自驱动 coordinator；worker 数由 DAG 并行度决定(能并行就并行,受"最多并行"上限约束)、按需拉起、空闲复用、跑完回收 —— **不用手动加 worker**。执行中显示"N worker"。
-- **审批门**：agent `gate-create` 后，DAG 上浮出「批准 / 驳回」。
-- **节点详情（只读 spec）**：点节点看 spec / 状态 / 结果。改描述或依赖 → 让 agent 重绘 DAG。
-- **手绘蜡笔风**：🖍️ SVG feTurbulence 波动描边 + 米色速写本画布。
+An end-to-end pass, assuming the skill is installed and `orca-dag` is on PATH (modules 1 & 2 above):
 
-## HTTP 接口
+1. **Get your project under Orca** (once per repo) and make sure Orca is up:
 
-| 方法 | 路径 | 作用 |
+   ```bash
+   cd ~/code/my-project
+   orca repo add .        # skip if already Orca-managed
+   orca status --json     # runtime.state should be "ready"; otherwise `orca open`
+   ```
+
+2. **Plan in your agent.** In Claude Code (or any agent with the skill), describe what you want and ask for a DAG:
+
+   > Use the orca-dag skill: break "add CSV export to the reports page" into a task DAG.
+
+   The agent will ask a few clarifying questions, write `docs/PRD.md` / `docs/TECH_SPEC.md`, then run `orca orchestration run-create` + `task-create --deps …`. When it's done it tells you the **Run id** (like `run_ab12cd34ef56`).
+
+3. **Open the viewer** from the project directory:
+
+   ```bash
+   orca-dag               # serves :8787 and opens the browser
+   ```
+
+4. **Pick the Run** the agent just named in the top-bar dropdown. The DAG appears and refreshes every 2 seconds — you can keep chatting with the agent to reshape it and watch nodes pop in live.
+
+5. **Choose harnesses.** Set the toolbar's **Default harness** (fallback for every node), and optionally click individual nodes to override harness/model per node. Set **Max parallel**.
+
+6. **Click "▶ Run with Orca"** and accept the confirmation (it explains that the viewer takes over the Run's coordinator slot, fencing your agent's terminal — that's expected). Ready tasks fire in parallel; running nodes get the crayon scribble; the graph advances as workers report `worker_done`.
+
+7. **Resolve gates when they pop.** If the plan includes approval gates, approve/reject buttons float over the DAG at the right moment.
+
+8. **Change the plan?** Go back to the agent conversation. It reclaims the Run with `orca orchestration run-use --id <run>` (or just opens a fresh Run and redraws), and the viewer follows along. Then hit Run again.
+
+## What the viewer can do
+
+- **Live DAG visualization** — node statuses `pending / ready / dispatched / completed / failed / blocked` map to colors; each node wears its harness on its corner.
+- **Switchable layout algorithms**: the "Layout" segment in the toolbar toggles **layered horizontal / vertical** (dagre / Sugiyama) and **force-directed** (Fruchterman–Reingold); **↻ Re-layout** reruns auto-layout (clearing manual drags). The choice persists.
+- **Drag to arrange**: nodes drag freely and hold their positions across live polling refreshes (only untouched nodes follow auto-layout).
+- **Execution animations**: `dispatched` (running) nodes get scribbled over and over with diagonal crayon strokes; edges flowing out of a running node start as a swimming dashed draft, then pencil strokes trace them solid toward the downstream node.
+- **Per-node harness**: click a node and pick `claude / kimi / opencode / grok / codex` or a custom command in its panel (persisted to the workspace's `.orca-dag.config.json`); nodes without an explicit choice fall back to the toolbar's **default harness**.
+- **Per-node model override**: for harnesses that support it — opencode gets a dropdown enumerated from `opencode models`; claude / codex / cursor get free-text (passed via `worker-start --model`). Others run on their default model.
+- **▶ Run with Orca / ⏹ Stop** + **Max parallel**: start/stop the viewer's built-in self-driven coordinator; worker count follows the DAG's parallelism (whatever is ready runs together, capped by "Max parallel"), spun up on demand, reused while idle, reclaimed when done — **no manual worker management**. While running it shows "N workers".
+- **Approval gates**: after the agent runs `gate-create`, approve/reject buttons float over the DAG.
+- **Node details (read-only spec)**: click a node to see its spec / status / result. To change the spec or deps, have the agent redraw the DAG.
+- **Hand-drawn crayon style**: 🖍️ SVG feTurbulence wobbled strokes on a cream sketchbook canvas.
+
+## HTTP API
+
+| Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/dag` | 当前 DAG：`{ nodes, edges, gates, generatedAt }` |
-| `POST` | `/api/run` | `{ harnessByTask?, defaultHarness?, maxConcurrency? }`：启动自驱动 coordinator |
-| `POST` | `/api/run-stop` | 停止 coordinator 并回收已拉起的 worker |
-| `GET` | `/api/run-status` | coordinator 实时状态：`{ running, busy, workers, error }` |
-| `POST` | `/api/gates/:id/resolve` | `{ resolution }`：解决审批门 |
-| `POST` | `/api/reset` | `orca orchestration reset --tasks` 清空任务 |
-| `GET` | `/api/config` | viewer 配置（harness 选择 / 最多并行 / 布局），存在 workspace 的 `.orca-dag.config.json` |
-| `PUT` | `/api/config` | 合并写入 viewer 配置 |
-| `GET` | `/api/health` | 健康检查（返回 workspace 目录） |
+| `GET` | `/api/dag?run=<id>` | The Run's DAG: `{ runId, nodes, edges, gates, generatedAt }` |
+| `GET` | `/api/runs` | List orchestration Runs |
+| `POST` | `/api/runs` | `{ objective }`: create a Run (via a throwaway coordinator terminal) |
+| `GET` | `/api/terminals` | List Orca terminals |
+| `POST` | `/api/run` | `{ runId, harnessByTask?, modelByTask?, defaultHarness?, maxConcurrency? }`: start the self-driven coordinator |
+| `POST` | `/api/run-stop` | Stop the coordinator and reclaim its workers |
+| `GET` | `/api/run-status` | Live coordinator status: `{ running, busy, attempts, error, … }` |
+| `POST` | `/api/gates/:id/resolve` | `{ resolution, runId }`: resolve an approval gate |
+| `POST` | `/api/reset` | `{ confirmAllRuns: true }`: `orca orchestration reset --tasks` — clears tasks in **all** Runs |
+| `GET` | `/api/models/:harness` | Models selectable for a harness (currently only opencode enumerates) |
+| `GET` | `/api/config` | Viewer config (harness/model choices, max parallel, layout, last Run), stored in the workspace's `.orca-dag.config.json` |
+| `PUT` | `/api/config` | Merge-write the viewer config |
+| `GET` | `/api/health` | Health check (returns the workspace directory) |
 
-## 代码结构
+## Code layout
 
 ```
-skill/SKILL.md            建图规范 + spec 写作约定 + 如何执行（选 harness + Run）+ 边界
+skill/SKILL.md            graph-building conventions + spec-writing rules + how execution works + boundaries
 server/src/
-  index.ts                Express：DAG / run / run-stop / run-status / gates / reset；托管 SPA
-  coordinator.ts          自驱动 coordinator 循环：轮询 DAG，并行 dispatch --inject 到按需/复用的 worker
-  orca.ts                 orca CLI 封装：task-list→DAG、spawnWorker(自主 agent)、dispatchTask、close
-  config.ts               viewer 配置持久化：workspace 下 .orca-dag.config.json 的读写（/api/config）
-  webAssets.ts            编译期内嵌前端资源的加载器（生产二进制用）
+  index.ts                Express: dag / runs / run / run-stop / run-status / gates / reset / models / config; serves the SPA
+  coordinator.ts          self-driven coordinator loop: polls the DAG, fires ready tasks in parallel via worker-start
+  orca.ts                 orca CLI wrapper: task-list→DAG, worker-start/legacy/opencode workers, gates, terminals, models
+  config.ts               viewer config persistence: .orca-dag.config.json in the workspace (/api/config)
+  webAssets.ts            loader for the frontend assets embedded at build time (production binary)
 web/src/
-  App.tsx                 全宽 DAG 主壳、每 2s 轮询
-  components/DagView.tsx     React Flow 图 + 状态节点（含 harness 标签）
-  components/ExecControls.tsx 默认 harness + 最多并行 + Run/Stop + 实时状态
-  components/NodePanel.tsx    节点详情 + 每节点 harness 选择
-  components/GatePanel.tsx    审批门浮层
-  harness.ts                响应式配置 store：每节点 harness / 默认 harness / 最多并行 / 布局（/api/config 持久化）
-  layout.ts                 布局算法：dagre 分层（LR/TB）+ 力导向（Fruchterman–Reingold）
+  App.tsx                 full-width DAG shell, 2s polling, hand-drawn SVG filter defs
+  components/DagView.tsx     React Flow graph + status nodes (harness label, crayon animations)
+  components/ExecControls.tsx default harness + max parallel + Run/Stop + live status
+  components/NodePanel.tsx    node details + per-node harness & model pickers
+  components/GatePanel.tsx    approval-gate overlay
+  components/RunPicker.tsx    Run selector + "New Run"
+  components/DoodleSelect.tsx hand-drawn select (portal dropdown, search, keyboard nav)
+  harness.ts                reactive config store: per-node harness/model, default, max parallel, layout (persisted via /api/config)
+  layout.ts                 layout algorithms: dagre layered (LR/TB) + force-directed (Fruchterman–Reingold)
   types.ts / api.ts
-scripts/build-binary.mjs  vite build → 内嵌资源 → bun --compile → dist/orca-dag
+scripts/build-binary.mjs  vite build → embed assets → bun --compile → dist/orca-dag
 ```
 
-## 设计说明与边界
+## Design notes and boundaries
 
-- **大脑外移**：规划由你已有的 agent 承担（skill 提供规范），viewer 不内嵌 Claude Agent SDK。
-- **viewer 自己当 coordinator**：实测 `orca orchestration run` 不真派发任务，所以 `server/src/coordinator.ts` 用已验证的 `dispatch --inject` 自驱动。并行度由 DAG 决定（同时 ready 的任务一起派，受 `maxConcurrency` 上限）；worker 按需拉起、空闲复用、跑完回收。
-- **worker 必须是自主 agent**：hands-off 执行要求 worker 能自己跑 `orca orchestration send --type worker_done` 回报 —— 否则会卡在权限确认。所以 `spawnWorker` 用免审批方式起 agent：`claude --dangerously-skip-permissions`（已验证）。其余 harness 的免审批开关见 `orca.ts` 的 `HARNESS_LAUNCH`，需各自填好并验证。
-- **`dispatch --inject` 的坑**：它把 preamble 打进 agent 输入框，但常常**不自动提交**（就绪竞态）。coordinator 因此在 dispatch 后停 ~2s 再补发一个 Enter；对已提交/空输入的多余 Enter 是无害 no-op。
-- **每节点 harness 存 workspace 配置文件**：Orca 的 task 没有 harness/metadata 字段（`task-create` 只有 spec/title/display-name/deps/parent），所以 viewer 把 harness 选择、最多并行、布局存到 workspace 根的 `.orca-dag.config.json`（`server/src/config.ts`，`GET/PUT /api/config`），换浏览器 / 清 localStorage 都不丢；前端 `harness.ts` 是响应式 store，启动时从服务器加载并把旧的 localStorage 值一次性迁移上去。Run 时仍以 `harnessByTask` 传给后端。
-- **改不了已建任务**：`orca orchestration task-update` 只能改 `--status` / `--result`，**没有改 spec/标题/依赖的接口**，也没有删除单个任务的命令（只有 `reset` 整体清空）。所以"修改任务"= **让 agent 重绘 DAG**（`reset --tasks` 后重建，会换 id）。
+- **The brain lives outside**: planning is done by the agent you already have (the skill provides the conventions); the viewer embeds no Claude Agent SDK.
+- **The viewer is its own coordinator**: Orca deliberately ships no scheduler, so `server/src/coordinator.ts` drives the loop with Orca's Run/Task/Dispatch primitives. Parallelism follows the DAG (everything ready fires together, capped by `maxConcurrency`); workers are spun up on demand, reused while idle, reclaimed at the end.
+- **Workers must be autonomous agents**: hands-off execution requires the worker to run `orca orchestration send --type worker_done` on its own — otherwise it stalls on a permission prompt. `worker-start` launches Orca-configured TUI agents with their autonomous flags; for custom commands the legacy path uses `HARNESS_LAUNCH` in `orca.ts` (only `claude --dangerously-skip-permissions` is verified — add and verify flags for others before relying on them).
+- **The `dispatch --inject` quirk** (legacy path): it types the preamble into the agent's input box but often **doesn't submit it** (a readiness race). The coordinator waits ~2s after dispatch and sends an extra Enter; a stray Enter on already-submitted input is a harmless no-op.
+- **opencode goes through its own path**: `worker-start --agent opencode` opens the TUI but the injected preamble never lands, so the coordinator opens a bare shell, mints a tracking dispatch, and runs `opencode run --auto "$(cat <preamble>)"` (`--auto` is mandatory — the default permission policy silently auto-rejects tool calls).
+- **Per-node harness/model live in a workspace config file**: Orca tasks have no harness/metadata field (`task-create` only takes spec/title/display-name/deps/parent), so the viewer stores harness and model choices, max parallel, and layout in `.orca-dag.config.json` at the workspace root (`server/src/config.ts`, `GET/PUT /api/config`) — surviving browser switches and cleared localStorage. The frontend's `harness.ts` is a reactive store that hydrates from the server and migrates old localStorage values once. At Run time the choices are passed to the backend as `harnessByTask` / `modelByTask`.
+- **Created tasks can't be edited**: `orca orchestration task-update` only changes `--status` / `--result` — **no interface to edit spec/title/deps**, and no single-task delete (`reset` clears everything, across all Runs). So "change a task" = **have the agent redraw the DAG in a fresh Run**.

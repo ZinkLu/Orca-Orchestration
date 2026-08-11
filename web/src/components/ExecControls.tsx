@@ -37,7 +37,7 @@ export function ExecControls({
 }) {
   const config = useConfig();
   const storedIsCustom = !KNOWN.includes(config.defaultHarness);
-  // "自定义…" selected but not yet typed — a UI-only state until run()
+  // "Custom…" selected but not yet typed — a UI-only state until run()
   const [forceCustom, setForceCustom] = useState(false);
   const [custom, setCustom] = useState(storedIsCustom ? config.defaultHarness : "");
   const [status, setStatus] = useState<RunStatus | null>(null);
@@ -83,21 +83,22 @@ export function ExecControls({
 
   async function run() {
     if (!runId) {
-      setErr("请先选择一个 Run");
+      setErr("Pick a Run first");
       return;
     }
     if (!resolvedDefault) {
-      setErr("请选择默认 harness");
+      setErr("Pick a default harness");
       return;
     }
     // Binding is the only way to get mutation authority on a Run, and it fences
     // whoever held it — usually the agent terminal that drew this DAG.
     const ok = confirm(
-      "开始执行会把这个 Run 的 coordinator 绑定到 viewer。\n\n" +
-        "正在协调该 Run 的 agent 终端会被 fence（它的 orchestration 写操作会开始报 " +
-        "consumer_fenced）。它可以随时用 orca orchestration run-use --id " +
+      "Starting execution binds this Run's coordinator to the viewer.\n\n" +
+        "Any agent terminal currently coordinating the Run gets fenced (its orchestration " +
+        "mutations start failing with consumer_fenced). It can take the Run back anytime with " +
+        "orca orchestration run-use --id " +
         runId +
-        " 抢回去。\n\n继续？",
+        ".\n\nContinue?",
     );
     if (!ok) return;
 
@@ -136,7 +137,7 @@ export function ExecControls({
   return (
     <div className="exec">
       <div className="exec__field">
-        <span className="exec__label">默认 harness</span>
+        <span className="exec__label">Default harness</span>
         <DoodleSelect
           size="sm"
           value={defHarness}
@@ -144,14 +145,14 @@ export function ExecControls({
           disabled={running}
           options={[
             ...HARNESSES.map((h) => ({ value: h, label: h })),
-            { value: CUSTOM, label: "自定义…" },
+            { value: CUSTOM, label: "Custom…" },
           ]}
         />
         {defHarness === CUSTOM && (
           <input
             className="exec__custom"
             value={custom}
-            placeholder="命令"
+            placeholder="command"
             onChange={(e) => setCustom(e.target.value)}
             disabled={running}
           />
@@ -159,7 +160,7 @@ export function ExecControls({
       </div>
 
       <label className="exec__field">
-        <span className="exec__label">最多并行</span>
+        <span className="exec__label">Max parallel</span>
         <input
           className="exec__num"
           type="number"
@@ -174,10 +175,11 @@ export function ExecControls({
       {running ? (
         <div className="exec__live">
           <button className="btn btn--stop-run" onClick={stop} disabled={busy}>
-            ⏹ 停止
+            ⏹ Stop
           </button>
           <span className="exec__running">
-            <span className="exec__pulse" /> 执行中 · {status?.busy ?? 0} worker
+            <span className="exec__pulse" /> Running · {status?.busy ?? 0} worker
+            {(status?.busy ?? 0) === 1 ? "" : "s"}
             {/* one bead per in-flight Dispatch, breathing out of phase */}
             <span className="exec__beads" aria-hidden="true">
               {Array.from({ length: Math.min(status?.busy ?? 0, 8) }, (_, i) => (
@@ -185,7 +187,7 @@ export function ExecControls({
               ))}
             </span>
             {/* Orca circuit-breaks a task after 3 failed attempts — surface it early */}
-            {retrying > 0 && <b className="exec__retry">↻ {retrying} 次重试中</b>}
+            {retrying > 0 && <b className="exec__retry">↻ {retrying} retrying</b>}
           </span>
         </div>
       ) : (
@@ -193,9 +195,9 @@ export function ExecControls({
           className={`btn btn--run${readyCount > 0 && !busy ? " btn--attract" : ""}`}
           onClick={run}
           disabled={busy || taskIds.length === 0 || !runId}
-          title={runId ? "绑定该 Run 并按依赖并行执行" : "先选择一个 Run"}
+          title={runId ? "Bind this Run and execute in dependency order" : "Pick a Run first"}
         >
-          ▶ 让 Orca 执行
+          ▶ Run with Orca
         </button>
       )}
 

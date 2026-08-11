@@ -215,9 +215,9 @@ export default function App() {
     // `orca orchestration reset` has no --run flag: it clears the whole local
     // orchestration database, not just the Run on screen. Say so plainly.
     const ok = confirm(
-      "⚠️ 清空 Orca 本地【所有 Run】的任务？\n\n" +
-        "orca orchestration reset --tasks 没有 --run 作用域，会连同其它 Run 的任务一起删除，" +
-        "不只是当前这张图。此操作不可撤销。",
+      "⚠️ Clear tasks in ALL local Orca Runs?\n\n" +
+        "orca orchestration reset --tasks has no --run scope — it deletes tasks in every Run, " +
+        "not just the graph on screen. This cannot be undone.",
     );
     if (!ok) return;
     try {
@@ -225,7 +225,7 @@ export default function App() {
       setSelectedId(null);
       refresh();
     } catch (err) {
-      alert(`重置失败：${String(err)}`);
+      alert(`Reset failed: ${String(err)}`);
     }
   }
 
@@ -263,7 +263,7 @@ export default function App() {
           </svg>
           <div>
             <div className="topbar__title">Orca DAG Viewer</div>
-            <div className="topbar__subtitle">和 agent 聊天建图 · 选 harness，让 Orca 按依赖并行执行</div>
+            <div className="topbar__subtitle">Chat with your agent to build the graph · pick harnesses, let Orca run it in parallel</div>
           </div>
         </div>
         <span className="topbar__tape" aria-hidden="true" />
@@ -271,12 +271,12 @@ export default function App() {
           <RunPicker runId={runId} onPick={pickRun} autoPick={hydrated} />
           <div
             className={`conn ${connError ? "conn--bad" : "conn--ok"}`}
-            title={connError ?? "已连接 Orca"}
+            title={connError ?? "Connected to Orca"}
           >
-            {connError ? "读取失败" : "已连接 Orca"}
+            {connError ? "Fetch failed" : "Orca connected"}
           </div>
-          <button className="btn btn--ghost" onClick={onReset} title="清空本地所有 Run 的任务">
-            清空任务
+          <button className="btn btn--ghost" onClick={onReset} title="Clear tasks in all local Runs">
+            Clear tasks
           </button>
         </div>
       </header>
@@ -304,8 +304,8 @@ export default function App() {
             </div>
             <div className="dag-toolbar__right">
               <div className="layout-ctl">
-                <span className="exec__label">布局</span>
-                <div className="seg" role="group" aria-label="布局算法">
+                <span className="exec__label">Layout</span>
+                <div className="seg" role="group" aria-label="Layout algorithm">
                   {LAYOUTS.map((l) => (
                     <button
                       key={l.kind}
@@ -320,14 +320,14 @@ export default function App() {
                 </div>
                 <button
                   className="btn btn--ghost"
-                  title="重新布局（清除手动拖拽，回到自动排布）"
+                  title="Re-run auto-layout (discards manual drags)"
                   onClick={() => setReorgNonce((n) => n + 1)}
                 >
-                  ↻ 重排
+                  ↻ Re-layout
                 </button>
               </div>
               <span className="dag-toolbar__meta">
-                {dag.nodes.length} 个任务 · {dag.edges.length} 条依赖
+                {dag.nodes.length} tasks · {dag.edges.length} deps
               </span>
               <ExecControls
                 runId={runId}
@@ -355,10 +355,11 @@ export default function App() {
 
             {!runId && (
               <div className="empty-run">
-                <p className="empty-run__title">先选一个 Run</p>
+                <p className="empty-run__title">Pick a Run first</p>
                 <p className="empty-run__body">
-                  Orca 1.4.160 起任务归属于 Run，不再是全局的。用右上角的 Run 下拉框选一个，
-                  或让 agent 跑 <code>orca orchestration run-create</code> 建一个新的。
+                  Since Orca 1.4.160 tasks belong to a Run — they are no longer global. Pick one with
+                  the Run dropdown in the top-right, or have your agent run{" "}
+                  <code>orca orchestration run-create</code> to start a new one.
                 </p>
               </div>
             )}

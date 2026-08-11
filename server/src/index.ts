@@ -43,7 +43,7 @@ function fail(res: express.Response, err: unknown): void {
   // usefully `run-use --takeover-legacy` for a Run adopted by the 1.4.160
   // migration, which plain `run-use` refuses while it still has live work.
   const recovery = e?.recoveryCommand ?? null;
-  const message = recovery ? `${e.message}\n\n可用命令解除：${recovery}` : String(e?.message ?? err);
+  const message = recovery ? `${e.message}\n\nUnblock with: ${recovery}` : String(e?.message ?? err);
   res.status(status).json({ error: message, code, recoveryCommand: recovery });
 }
 
@@ -207,8 +207,8 @@ app.post("/api/reset", async (req, res) => {
   if (req.body?.confirmAllRuns !== true) {
     res.status(400).json({
       error:
-        "orca orchestration reset 会清空本地所有 Run 的任务，没有 --run 作用域。" +
-        "确认后请带 confirmAllRuns: true 重试。",
+        "orca orchestration reset clears tasks in ALL local Runs — it has no --run scope. " +
+        "Retry with confirmAllRuns: true to confirm.",
       code: "confirm_required",
     });
     return;

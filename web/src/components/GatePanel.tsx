@@ -26,7 +26,7 @@ export function GatePanel({
       await resolveGate(gate.id, resolution, runId);
       onResolved();
     } catch (err) {
-      alert(`审批失败：${String((err as Error).message ?? err)}`);
+      alert(`Gate resolution failed: ${String((err as Error).message ?? err)}`);
     } finally {
       setBusyId(null);
     }
@@ -36,8 +36,8 @@ export function GatePanel({
     <div className="gates">
       {pending.map((g) => (
         <div key={g.id} className="gate">
-          <div className="gate__badge">需要审批</div>
-          <div className="gate__question">{g.question || "请审批此决策门"}</div>
+          <div className="gate__badge">Approval needed</div>
+          <div className="gate__question">{g.question || "Resolve this decision gate"}</div>
           <div className="gate__actions">
             {g.options.map((opt) => (
               <button

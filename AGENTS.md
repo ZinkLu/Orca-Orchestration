@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for agents working **in this repo** (editing the viewer/tooling or the skill doc). For using the skill to build DAGs, read `skill/SKILL.md` and `README.md` instead.
+Guidance for agents working **in this repo** (editing the viewer/tooling or the skill doc). For using the skill to build DAGs, read `skill/SKILL.md` and `README.md` instead. `CLAUDE.md` is a symlink to this file — edit here, don't replace the link.
 
 ## Project shape
 
@@ -40,6 +40,13 @@ npm start              # server (tsx) against web/dist on disk; needs `npm run b
 - **Viewer must run inside an Orca-managed worktree** — `orca terminal create --worktree` needs the cwd to be registered (`orca repo add`/`orca worktree`), else `selector_not_found`.
 - **Requires Orca ≥ 1.4.160** (the Run/Task/Dispatch contract, PR #9925, 2026-07-29). Older Orca lacks `run-create`/`worker-start`.
 
+## Web app gotchas
+
+- **`web/src/harness.ts` is the single config store** (`useSyncExternalStore`). The server-side `.orca-dag.config.json` is the source of truth; localStorage is only a one-time migration source plus a write-through mirror. Writes debounce 250ms before `PUT /api/config`.
+- **Hydration order matters**: `App.tsx` gates `RunPicker`'s auto-pick behind a `hydrated` flag — if the picker fell back to "newest Run" before `initConfig()` resolved, it would overwrite the stored Run choice.
+- The UI polls `GET /api/dag` every 2s. Manually dragged nodes keep their positions across refreshes (only untouched nodes follow auto-layout; ↻ Re-layout bumps `reorgNonce` to clear drags). Layout algorithms live in `web/src/layout.ts` (dagre layered LR/TB + Fruchterman–Reingold force).
+- **The crayon look is SVG `feTurbulence` filters** defined once in `App.tsx` (`#crayon*`, `#pencil-edge*`, `#crayon-fill`), with tuned seeds/regions — e.g. `pencil-edge` uses `userSpaceOnUse` with an oversized region so perfectly horizontal edges don't collapse the filter to nothing. The comments explain each knob; read them before retuning. `DoodleSelect.tsx` replaces native `<select>`s to keep the style.
+
 ## Generated / runtime artifacts (never edit, never commit)
 
 - `server/src/generated/webAssets.ts` — written by `build:binary` only, gitignored, deleted in its `finally`. Don't create by hand.
@@ -56,5 +63,5 @@ npm start              # server (tsx) against web/dist on disk; needs `npm run b
 ## Conventions
 
 - **Rich "why" comments** are the norm for anything touching Orca — the quirks are non-obvious and the comments are load-bearing. Match this style; don't strip context when editing.
-- **User-facing error strings are bilingual** (Chinese + English mixed, e.g. `"orca terminal create 未返回 coordinator handle"`). Keep that tone when adding server-side errors.
+- **All docs and user-facing strings are English** (the project is open source; translated 2026-08-11). Keep new UI text, server errors, and docs in English. `README_zh.md` is the Simplified Chinese mirror of `README.md` — update both when changing README content.
 - TypeScript is `strict` in both packages; web also enforces `noUnusedLocals`/`noUnusedParameters`. ESM everywhere (`"type": "module"`, ES2022).

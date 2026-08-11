@@ -325,7 +325,7 @@ async function startOne(
     // Free the slot so the next tick can retry; Orca circuit-breaks the task
     // itself after 3 consecutive attempt failures.
     state.attempts.delete(task.id);
-    state.error = `任务 ${task.id} 启动失败：${String((err as Error).message ?? err)}`;
+    state.error = `Failed to start task ${task.id}: ${String((err as Error).message ?? err)}`;
   }
 }
 

@@ -50,7 +50,7 @@ export function RunPicker({
   }, [load]);
 
   async function onCreate() {
-    const objective = prompt("新 Run 的目标（objective）：");
+    const objective = prompt("Objective for the new Run:");
     if (!objective?.trim()) return;
     setCreating(true);
     setErr(null);
@@ -74,9 +74,9 @@ export function RunPicker({
         value={runId}
         onChange={onPick}
         disabled={disabled || runs.length === 0}
-        placeholder="（没有 Run）"
-        emptyText="（没有 Run）"
-        title={current ? `${current.id} · ${current.objective}` : "选择一个 Run"}
+        placeholder="(no Runs)"
+        emptyText="(no Runs)"
+        title={current ? `${current.id} · ${current.objective}` : "Pick a Run"}
         options={runs.map((r) => ({
           value: r.id,
           label: r.objective || r.id,
@@ -87,9 +87,9 @@ export function RunPicker({
         className="btn btn--ghost"
         onClick={onCreate}
         disabled={disabled || creating}
-        title="新建一个 Run（编排任务的命名空间）"
+        title="Create a new Run (the namespace orchestration tasks live in)"
       >
-        ＋ 新 Run
+        ＋ New Run
       </button>
       {err && <span className="exec__err">⚠️ {err}</span>}
     </div>
