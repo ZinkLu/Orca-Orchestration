@@ -5,7 +5,7 @@
 把「和 agent 聊天规划」与「可视化 + 执行」拆成两个独立模块：
 
 1. **skill**（`skill/SKILL.md`）：教**你自己的 agent**（Claude Code / kimi / …）如何把一个需求拆成 **Orca orchestration 的任务 DAG**，以及建图规范。规划的"大脑"在你的 agent 里，**不内嵌 Claude Agent SDK**。
-2. **viewer**（`server/` + `web/`，编译成全局二进制 `orca-dag`）：连到 Orca 的编排状态，**实时可视化**这张 DAG；每个节点**各自选 harness**（claude / kimi / opencode / grok …），还可以**选模型**；点 **「▶ Run with Orca」**，viewer 内置的**自驱动 coordinator** 就按依赖把 ready 任务**并行**派发给按需拉起的自主 worker，直到整张图跑完。
+2. **viewer**（`server/` + `web/`，以 `orca-dag` npm 包和独立二进制分发）：连到 Orca 的编排状态，**实时可视化**这张 DAG；每个节点**各自选 harness**（claude / kimi / opencode / grok …），还可以**选模型**；点 **「▶ Run with Orca」**，viewer 内置的**自驱动 coordinator** 就按依赖把 ready 任务**并行**派发给按需拉起的自主 worker，直到整张图跑完。
 
 > 核心流程：**agent 建图 → viewer 里选 Run、给节点选 harness → Run → 按 DAG 并行自动执行**。要改某个任务或依赖，就让 agent 重绘 DAG —— Orca 没有改单个任务的接口。
 >
@@ -18,7 +18,7 @@
 ## 它是怎么工作的
 
 ```
-   你的 agent（加载 orca-dag skill）                 orca-dag viewer（全局二进制）
+   你的 agent（加载 orca-dag skill）                 orca-dag viewer（npx orca-dag）
  ┌───────────────────────────────┐             ┌──────────────────────────────┐
  │  和你聊需求 → 拆解 → 建图        │             │  轮询 task-list → 画 DAG        │
  │  Bash: orca orchestration      │             │  每节点选 harness              │
@@ -32,7 +32,7 @@
 ```
 
 1. 你在**自己的 agent** 里聊需求。agent 加载 `orca-dag` skill，先 `orca orchestration run-create` 开一个 **Run**，再用 `task-create --deps …` 把任务与依赖建进这个 Run。
-2. 打开 viewer（`orca-dag`）。顶栏选 Run，它每 2 秒轮询 `orca orchestration task-list --run <id> --json`，用 **dagre** 布局、**React Flow** 渲染，状态实时变色。
+2. 打开 viewer（`npx orca-dag`）。顶栏选 Run，它每 2 秒轮询 `orca orchestration task-list --run <id> --json`，用 **dagre** 布局、**React Flow** 渲染，状态实时变色。
 3. 在 viewer 里给节点选 harness（或用一个默认 harness 兜底），设置 "Max parallel"，点 **「▶ Run with Orca」**。
 4. viewer 的 **coordinator 循环**接管：先把自己的一个 Orca 终端绑定为该 Run 的 coordinator（拿写权限），然后每轮找出所有 `ready` 任务，**并行**调 `orca orchestration worker-start --task <id> --agent <harness>` —— 由 **Orca 自己**创建 worker 终端、等就绪、注入 dispatch，并返回一个 **Dispatch**（一次尝试）。worker 干完发 `worker_done --outcome` → Orca **自动**把 task 和 dispatch 置为完成/失败 → 依赖转 `ready` → 继续，直到全跑完，然后 `worker-stop` 回收。
 5. 要改计划：回到 agent 对话让它重绘 DAG。
@@ -65,41 +65,58 @@ viewer 是个普通进程，没有终端身份，所以写操作一律 `run_requ
 - **项目是 Orca 管理的 worktree**：加 worker / 执行都要求当前目录是 Orca 注册的 repo/worktree（否则 `orca terminal create` 会报 `selector_not_found`）。用 `orca repo add <path>` 或 `orca worktree …` 先纳管。
 - **一个能跑 skill 的 agent**（建图侧）：Claude Code、或任何能读 `SKILL.md` 并执行 Bash 的 agent。
 - **viewer 侧只依赖 `orca` CLI** —— 不需要 `claude`、不需要 `ANTHROPIC_API_KEY`。
-- **Bun**（可选，仅打二进制时需要）。**Node.js ≥ 20**（跑 dev / `npm start` 时需要）。
+- **Node.js ≥ 20** 用于跑 `npx orca-dag` —— 用 release 二进制的话什么都不需要。**Bun** 只在你想自己打二进制时才需要。
 
-## 模块 1 · 安装 skill
+## 安装
+
+一条命令，两个模块一起到位：
 
 ```bash
-ln -s "$PWD/skill" ~/.claude/skills/orca-dag      # 或直接拷贝到 agent 的 skills 目录
+cd ~/any/orca-managed/project
+npx orca-dag
 ```
 
-然后在 agent 里聊需求，它会按 `SKILL.md` 的规范把 DAG 建进 Orca，并提示你运行 `orca-dag` 打开 viewer。
+它会把 `orca-dag` **skill** 装进你本机所有的 coding agent（Claude Code、Codex、Cursor、OpenCode、Gemini CLI、Droid，以及共享的 `~/.agents/skills` —— 存在哪个装哪个），然后在 <http://localhost:8787> 起 **viewer**，并把当前目录当作工作区。重复执行是安全的：skill 只在内容真的变了时才重写，你自己做的 symlink 目录会被完全跳过。
 
-## 模块 2 · 运行 viewer
+接着直接在 agent 里聊需求就行，它会按 `SKILL.md` 的规范把 DAG 建进 Orca，并提示你打开 viewer。
 
-开发（前端 5173 + 后端 8787，vite 代理 /api）：
+只要 **Node.js ≥ 20** —— 包是个约 500 KB、零依赖的 bundle，`bunx orca-dag` 同样可用。想常驻就 `npm i -g orca-dag`。
+
+机器上没有 Node？去 [releases 页](https://github.com/ZinkLu/Orca-Orchestration/releases) 拿独立二进制，行为完全一样，自带运行时，只需要 PATH 上有 `orca`：
+
+```bash
+tar xzf orca-dag-darwin-arm64.tar.gz && sudo mv orca-dag /usr/local/bin/ && orca-dag
+```
+
+开关：`PORT`（默认 8787）、`NO_OPEN=1`（不自动开浏览器）、`--no-skill` / `ORCA_DAG_NO_SKILL=1`（不碰 agent 的 skill 目录）、`WORKSPACE_DIR`（覆盖 `active` worktree）。
+
+只想要 skill、不要 viewer，或者想用标准工具管理？`npx skills add ZinkLu/Orca-Orchestration --skill orca-dag --global` —— 即 [open agent skills CLI](https://github.com/vercel-labs/skills)，`orca skills install` 底层调的也是它。
+
+## 卸载
+
+```bash
+npx orca-dag uninstall            # 想先看清单就加 --dry-run
+```
+
+把 skill 从所有装过的 agent 目录里删掉，并关掉 viewer 崩溃后残留的 `orca-dag coordinator` 终端 —— 后面这条其实最要紧，残留的 coordinator 会一直占着 Run，把你自己的 agent 挡在外面。你自己做的 symlink 只会被 unlink，不会顺着链接删，checkout 是安全的。
+
+有两样它默认不删：`.orca-dag.config.json`（每个节点的 harness/模型选择和画布布局，要删加 `--purge`），以及程序本身 —— 进程删不掉自己正在跑的文件。它会直接把对应命令打出来：`npm rm -g orca-dag`、`rm $(which orca-dag)`，或者你一直用 `npx` 的话什么都不用做。
+
+### 自己构建和发版
 
 ```bash
 npm install
-npm run dev            # 打开 http://localhost:5173
+npm run dev            # 前端 5173 + 后端 8787（vite 代理 /api）→ http://localhost:5173
+npm run build:npm      # 打出可发布的包 → dist-npm/（只要 Node）
+npm run build:binary   # 便携单文件二进制 → dist/orca-dag（约 100 MB，前端已内嵌；需要 Bun）
+npm run release 0.2.0  # 打 tag 并推送；CI 负责发 npm + 把各平台二进制挂到 GitHub release
 ```
 
-打成全局二进制（推荐，可在任意 Orca-managed 项目目录直接调用）：
-
-```bash
-npm run build:binary                 # 产出 dist/orca-dag（约 60 MB，前端已内嵌）
-cp dist/orca-dag /usr/local/bin/     # 装到 PATH
-
-cd ~/any/orca-managed/project
-orca-dag                             # 起在 http://localhost:8787，自动开浏览器；用当前目录当工作区
-```
-
-交叉编译（目标机自带 `orca` 即可）：`TARGET=bun-linux-x64 npm run build:binary`。
-开关：`PORT`（默认 8787）、`NO_OPEN=1`（不自动开浏览器）、`WORKSPACE_DIR`（覆盖 `active` worktree）。
+用 `TARGET=bun-linux-x64 npm run build:binary` 交叉编译到别的平台；`bash scripts/build-all-binaries.sh` 一次编出全部目标，release workflow 跑的就是它。
 
 ## Quick start
 
-假设 skill 已装好、`orca-dag` 已在 PATH（见上面模块 1、2），完整走一遍：
+从零开始，完整走一遍：
 
 1. **把项目纳入 Orca 管理**（每个仓库一次），并确认 Orca 在运行：
 
@@ -109,17 +126,17 @@ orca-dag                             # 起在 http://localhost:8787，自动开�
    orca status --json     # runtime.state 应为 "ready"；否则先 `orca open`
    ```
 
-2. **在 agent 里做规划。** 在 Claude Code（或任何装了 skill 的 agent）里描述需求并要一张 DAG：
+2. **在同一个目录起 viewer**，让它一直开着：
+
+   ```bash
+   npx orca-dag           # 装 skill 到你的 agent，起在 :8787 并自动开浏览器
+   ```
+
+3. **在 agent 里做规划。** 在 Claude Code（或任何刚拿到 skill 的 agent）里描述需求并要一张 DAG：
 
    > 用 orca-dag skill：把「给报表页加 CSV 导出」拆成一张任务 DAG。
 
    agent 会先问几个澄清问题，写 `docs/PRD.md` / `docs/TECH_SPEC.md`，然后跑 `orca orchestration run-create` + `task-create --deps …`。建完会告诉你 **Run id**（形如 `run_ab12cd34ef56`）。
-
-3. **在项目目录打开 viewer**：
-
-   ```bash
-   orca-dag               # 起在 :8787 并自动开浏览器
-   ```
 
 4. **在顶栏下拉框选中** agent 刚报的那个 Run。DAG 出现并每 2 秒刷新 —— 你可以继续和 agent 聊着调整计划，看节点实时长出来。
 
@@ -171,7 +188,9 @@ server/src/
   coordinator.ts          自驱动 coordinator 循环：轮询 DAG，用 worker-start 并行派发 ready 任务
   orca.ts                 orca CLI 封装：task-list→DAG、worker-start/legacy/opencode worker、门、终端、模型
   config.ts               viewer 配置持久化：workspace 下 .orca-dag.config.json 的读写（/api/config）
-  webAssets.ts            编译期内嵌前端资源的加载器（生产二进制用）
+  skill.ts                启动时把 skill/SKILL.md 装进本机的各个 agent
+  uninstall.ts            `orca-dag uninstall`：skill.ts 的严格镜像，外加清理残留终端
+  webAssets.ts            编译期内嵌前端资源（以及 skill）的加载器
 web/src/
   App.tsx                 全宽 DAG 主壳、每 2s 轮询、手绘 SVG filter 定义
   components/DagView.tsx     React Flow 图 + 状态节点（含 harness 标签、蜡笔动画）
@@ -183,7 +202,12 @@ web/src/
   harness.ts                响应式配置 store：每节点 harness/模型 / 默认 harness / 最多并行 / 布局（/api/config 持久化）
   layout.ts                 布局算法：dagre 分层（LR/TB）+ 力导向（Fruchterman–Reingold）
   types.ts / api.ts
-scripts/build-binary.mjs  vite build → 内嵌资源 → bun --compile → dist/orca-dag
+scripts/
+  build-binary.mjs        vite build → 内嵌资源和 skill → bun --compile → dist/orca-dag
+  build-npm.mjs           vite build → esbuild 打包 server → dist-npm/（可发布的 `orca-dag` 包）
+  build-all-binaries.sh   全部 Bun target + 压缩 + 校验和（release workflow 跑的就是它）
+  check-skill.mjs         守住 SKILL.md 的 frontmatter —— skills CLI 靠它识别安装
+  release.mjs             `npm run release <version>`：检查、打 tag、推送，剩下交给 CI
 ```
 
 ## 设计说明与边界

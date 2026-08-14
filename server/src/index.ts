@@ -22,17 +22,55 @@ import {
 import { loadConfig, saveConfig } from "./config";
 import { coordinatorStatus, startCoordinator, stopCoordinator } from "./coordinator";
 import { loadEmbeddedAssets } from "./webAssets";
+import { describeSkillInstall, installSkill } from "./skill";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
 
 const PORT = Number(process.env.PORT ?? 8787);
 // Directory used to resolve the `active` worktree for the coordinator terminal.
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR ?? process.cwd();
 const WORKTREE = process.env.ORCA_WORKTREE ?? "active";
+
+// --- Subcommands ----------------------------------------------------------
+// Handled before anything else so `uninstall` and `--help` never bind a port,
+// create an Orca terminal, or install the skill on their way out.
+const argv = process.argv.slice(2);
+
+if (argv.includes("--help") || argv.includes("-h")) {
+  console.log(`orca-dag — visualize and run an Orca orchestration task DAG
+
+Usage:
+  orca-dag                 install the orca-dag skill into your agents, then serve the viewer
+  orca-dag uninstall       remove the skill and close leftover Orca terminals
+  orca-dag --help          show this
+
+Options:
+  --no-skill               don't touch the agent skill directories on startup
+  --purge                  (uninstall) also delete this workspace's .orca-dag.config.json
+  --dry-run                (uninstall) report what would be removed, change nothing
+
+Environment:
+  PORT=8787                port to serve on
+  NO_OPEN=1                don't open a browser tab
+  ORCA_DAG_NO_SKILL=1      same as --no-skill
+  WORKSPACE_DIR=<path>     workspace to use instead of the current directory
+  ORCA_WORKTREE=active     Orca worktree selector for the coordinator terminal`);
+  process.exit(0);
+}
+
+if (argv.includes("uninstall")) {
+  const { runUninstall } = await import("./uninstall");
+  await runUninstall({
+    dryRun: argv.includes("--dry-run"),
+    purge: argv.includes("--purge"),
+    workspace: WORKSPACE_DIR,
+  });
+  process.exit(0);
+}
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
 
 /** Turn an Orca CLI failure into a response the UI can explain to the user. */
 function fail(res: express.Response, err: unknown): void {
@@ -279,8 +317,16 @@ if (embedded.size > 0) {
   }
 }
 
+// `orca-dag` is meant to be the single command that makes the whole project
+// work, so starting the viewer also puts the DAG-building skill in front of
+// whatever agents this machine has. Best-effort and idempotent — see skill.ts.
+const skillReport = describeSkillInstall(
+  await installSkill(__dirname, !argv.includes("--no-skill") && process.env.ORCA_DAG_NO_SKILL !== "1"),
+);
+
 app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
+  if (skillReport) console.log(skillReport);
   console.log(`Orca DAG viewer → ${url}`);
   console.log(`Workspace dir: ${WORKSPACE_DIR} (worktree: ${WORKTREE})`);
   if (servingUI && process.env.NO_OPEN !== "1") void openBrowser(url);

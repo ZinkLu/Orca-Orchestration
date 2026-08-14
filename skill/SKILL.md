@@ -86,8 +86,9 @@ orca orchestration gate-create \
 ## After the DAG is built: open the viewer and let Orca execute
 Once the DAG has taken shape, ask the user to open the viewer, and **tell them the Run id** (they pick it in the viewer's top bar):
 ```bash
-orca-dag        # run in the current project directory; serves http://localhost:8787 and opens the browser
+npx orca-dag    # run in the current project directory; serves http://localhost:8787 and opens the browser
 ```
+(If they already have it running — likely, since that command is also what installed this skill — they just need to reselect the Run.)
 In the viewer the user will: **pick your new Run in the top bar** → **watch the DAG live** → **choose a harness per node** (claude / codex / opencode / grok …, or a default fallback) → click **"▶ Run with Orca"** → **the viewer uses `worker-start` to spin up workers in dependency-parallel, waits for `worker_done`, and advances the whole graph** → **resolve approval gates**.
 
 In other words: **execution is the viewer's job, not yours.** Your responsibility ends at "the DAG is correct".

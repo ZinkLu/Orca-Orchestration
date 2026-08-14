@@ -14,9 +14,12 @@
     "dev:web": "npm run dev -w web",
     "build": "npm run build -w web",
     "build:binary": "node scripts/build-binary.mjs",
+    "build:npm": "node scripts/build-npm.mjs",
+    "release": "node scripts/release.mjs",
     "start": "npm run start -w server"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.25.0"
   }
 }

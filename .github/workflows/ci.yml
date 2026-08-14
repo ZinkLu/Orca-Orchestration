@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# The repo has no lint/test scripts (see AGENTS.md) — the checks that matter are
+# "does it still typecheck" and "does the thing users run actually boot".
+jobs:
+  check:
+    name: Typecheck + package smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate skill frontmatter
+        run: node scripts/check-skill.mjs
+
+      - name: Typecheck server
+        run: npx tsc -p server/tsconfig.json --noEmit
+
+      # `npm run build -w web` runs `tsc -b` before vite, so this is the web
+      # typecheck and the SPA build in one step.
+      - name: Typecheck + build web
+        run: npm run build -w web
+
+      - name: Stage npm package
+        run: node scripts/build-npm.mjs
+
+      # The viewer needs the `orca` CLI for anything real, and Orca is a desktop
+      # runtime we can't install here — so the smoke test covers exactly the part
+      # that is CI-checkable: the published tarball boots on plain Node, serves
+      # its API, and serves the built SPA from disk.
+      - name: Smoke test the staged package
+        run: |
+          set -euo pipefail
+          npm pack ./dist-npm --pack-destination /tmp
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          npm install /tmp/orca-dag-*.tgz >/dev/null
+          NO_OPEN=1 PORT=8899 npx orca-dag &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8899/api/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:8899/api/health | tee /dev/stderr | grep -q '"ok":true'
+          curl -sf http://localhost:8899/ | grep -qi '<div id="root">'
+          echo "✅ npx orca-dag boots and serves the SPA"
+
+      # Startup writes the skill into the user's agent directories, so the
+      # uninstall path has to keep taking it back — otherwise the install is a
+      # one-way door. Round trip against a throwaway HOME so the runner's own
+      # config is never involved.
+      - name: Skill install/uninstall round trip
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fakehome/.claude
+          cd /tmp/smoke
+          HOME=/tmp/fakehome NO_OPEN=1 PORT=8897 timeout 5 ./node_modules/.bin/orca-dag || true
+          test -f /tmp/fakehome/.claude/skills/orca-dag/SKILL.md
+          HOME=/tmp/fakehome ./node_modules/.bin/orca-dag uninstall | grep -q removed
+          test ! -e /tmp/fakehome/.claude/skills/orca-dag
+          echo "✅ install and uninstall stay symmetric"
+
+  binary:
+    name: Bun binary build
+    # Each binary embeds a whole Bun runtime (~100 MB), so building the full
+    # five-target set on every PR would cost minutes and hundreds of MB for no
+    # extra signal. One target proves the embed-and-compile path still works;
+    # the release workflow builds the rest.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: npm ci
+
+      - name: Compile the viewer binary
+        run: TARGET=bun-linux-x64 OUT_NAME=orca-dag-linux-x64 node scripts/build-binary.mjs
+
+      - name: Check the binary starts
+        run: |
+          set -euo pipefail
+          chmod +x dist/orca-dag-linux-x64
+          NO_OPEN=1 PORT=8898 ./dist/orca-dag-linux-x64 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8898/api/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:8898/api/health | grep -q '"ok":true'
+          # The binary serves its SPA from the base64 map embedded at compile
+          # time, so this also proves the embedding step produced real assets.
+          curl -sf http://localhost:8898/ | grep -qi '<div id="root">'
+          echo "✅ binary boots and serves the embedded SPA"

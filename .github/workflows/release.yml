@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (without the leading v), e.g. 0.2.0"
+        required: true
+
+jobs:
+  npm:
+    name: Publish orca-dag to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance: the publish is signed with a Sigstore
+      # attestation tying the tarball to this workflow run.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # The tag is the version of record; scripts/build-npm.mjs writes it into
+      # the staged package.json so the repo's own package.json never has to be
+      # bumped in a commit.
+      - name: Stage npm package
+        run: node scripts/build-npm.mjs
+        env:
+          PKG_VERSION: ${{ inputs.version || github.ref_name }}
+
+      - name: Publish
+        run: npm publish ./dist-npm --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  binaries:
+    name: Build + attach standalone binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: npm ci
+
+      - name: Compile for every target
+        run: bash scripts/build-all-binaries.sh
+
+      # For people without Node: a single ~60 MB file that only needs the `orca`
+      # CLI on PATH. Draft-free, notes generated from the commit range.
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: gh release create "$GITHUB_REF_NAME" dist/orca-dag-* dist/SHA256SUMS.txt --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

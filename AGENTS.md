@@ -20,6 +20,7 @@ npm run dev:server     # tsx watch src/index.ts (server only)
 npm run dev:web        # vite (web only)
 npm run build          # web only: tsc -b && vite build → web/dist
 npm run build:binary   # web build → embed as base64 in server/src/generated/webAssets.ts → bun --compile → dist/orca-dag
+npm run build:npm      # web build → esbuild the server → dist-npm/ (the publishable `orca-dag` package; Node only, no Bun)
 npm start              # server (tsx) against web/dist on disk; needs `npm run build` first for UI
 ```
 
@@ -28,6 +29,20 @@ npm start              # server (tsx) against web/dist on disk; needs `npm run b
   - server: `npx tsc -p server/tsconfig.json --noEmit`
 - **`build:binary` requires `bun` on PATH** (not declared as a dependency). Cross-compile with `TARGET=bun-linux-x64 npm run build:binary`.
 - Binary runtime env: `PORT` (8787), `NO_OPEN=1` (skip browser), `WORKSPACE_DIR` (overrides `active` worktree), `ORCA_WORKTREE` (default `active`).
+
+## Distribution
+
+Two artifacts ship from this repo, and **neither is an Orca plugin** — Orca's plugin panels are `srcdoc` iframes under `default-src 'none'; connect-src 'none'`, so a panel can't `fetch` the viewer's API at all, and `TabContentType` is a closed union with no registry for third-party panes. Orca also deliberately ships no scheduler ("A Run is a namespace and home inbox. It never schedules or places workers."), so an external coordinator like this one is the intended shape, not a workaround.
+
+- **`npx orca-dag` is the whole install.** `server/src/skill.ts` writes `skill/SKILL.md` into every agent skills directory that exists under `$HOME` before the server listens, so the skill half and the viewer half arrive together. It must stay best-effort: never throw, never rewrite an unchanged file, and **never write through a symlinked skill directory** (that's the `ln -s "$PWD/skill"` recipe — following it would clobber someone's working copy). `--no-skill` / `ORCA_DAG_NO_SKILL=1` opts out.
+- **`orca-dag uninstall` (`server/src/uninstall.ts`) is the mirror image and has to stay that way** — anything a future startup step writes outside the workspace must get a matching removal here, or the install becomes a one-way door. It shares `AGENT_SKILL_DIRS`/`SKILL_NAME` with `skill.ts` so the two can't drift. It unlinks symlinked skill dirs rather than following them, keeps `.orca-dag.config.json` unless `--purge` (it's real user work: harness/model picks and canvas layout), and closes every terminal whose title starts with `COORDINATOR_TITLE` — a crashed viewer otherwise leaves one bound to the Run, fencing the user's own agent.
+- **Subcommands are dispatched at the top of `index.ts`**, before the express app is built, so `uninstall` and `--help` never bind a port, create an Orca terminal, or install the skill on their way out. Keep new subcommands in that block.
+- **The skill** also installs through the community skills CLI straight from this repo: `npx skills add ZinkLu/Orca-Orchestration --skill orca-dag`. Discovery keys off `skill/SKILL.md`'s frontmatter — `scripts/check-skill.mjs` guards it in CI (don't shell out to `skills add . --list` there; it prompts when no agent is detected and hangs).
+- **The binary embeds the skill too** (`SKILL_MD` in the generated `webAssets.ts`, next to `WEB_ASSETS`) — it has no package directory to read from, and a single downloaded file has to behave like the npm package.
+- **The viewer** publishes as the `orca-dag` npm package (`npx orca-dag`), plus standalone Bun binaries attached to the GitHub release for people without Node. `scripts/build-npm.mjs` stages `dist-npm/`; the bundle lands at `dist/server/index.mjs` **on purpose** — `index.ts`'s disk fallback looks in `join(__dirname, "..", "..", "web", "dist")`, which only resolves inside the package at that depth. Moving either path breaks the SPA silently (API still answers, UI 404s), which is exactly what the CI smoke test checks.
+- Inside Orca, the viewer surfaces via `orca tab create --url` (already how `openBrowser` works) — a real Electron browser tab with no CSP restrictions.
+- **Releasing is one command: `npm run release <version>`** (`scripts/release.mjs`) — it refuses a dirty tree, a non-`main` branch, a bad semver or an existing tag, runs the checks, then tags and pushes. `.github/workflows/release.yml` takes it from there. **The tag is the version of record** — `PKG_VERSION` overrides the staged `package.json`, so the repo's own version never needs bumping in a commit.
+- `.github/workflows/ci.yml` typechecks both packages, stages the package, and boots the packed tarball on plain Node. `release.yml` publishes to npm with provenance (needs an `NPM_TOKEN` secret) and cross-compiles every binary target from one Linux runner.
 
 ## Architecture gotchas
 
@@ -51,6 +66,7 @@ npm start              # server (tsx) against web/dist on disk; needs `npm run b
 
 - `server/src/generated/webAssets.ts` — written by `build:binary` only, gitignored, deleted in its `finally`. Don't create by hand.
 - `.orca-dag.config.json` (workspace root) — viewer config (per-node harness, default harness, concurrency, layout, last runId). Written by `config.ts` via tmp+rename. Orca tasks have no metadata field, so this file is the viewer's own store.
+- `dist-npm/` — the staged npm package, rebuilt from scratch by `scripts/build-npm.mjs` (it `rm -rf`s the dir first). Never hand-edit; the `package.json` in there is generated.
 - `dist/`, `web/dist/`, `node_modules/`, `*.tsbuildinfo` — all gitignored.
 
 ## Orca integration constraints (also in skill/SKILL.md)
