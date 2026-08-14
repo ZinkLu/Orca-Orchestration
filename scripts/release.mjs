@@ -47,6 +47,20 @@ if (tags.includes(tag)) {
   process.exit(1);
 }
 
+// The tag alone is enough to trigger CI (a tag push carries its commit), but it
+// would publish a version whose source isn't on the default branch — invisible
+// to anyone reading the repo, and impossible to reproduce from main.
+try {
+  execFileSync("git", ["fetch", "origin", "main", "--quiet"], { cwd: root, stdio: "inherit" });
+  if (git("rev-parse", "HEAD") !== git("rev-parse", "origin/main")) {
+    console.error("HEAD is not what origin/main points at. Push your commits first — the release must be reproducible from main.");
+    process.exit(1);
+  }
+} catch {
+  console.error("Could not reach origin to compare with main. Fix the remote, then retry.");
+  process.exit(1);
+}
+
 // Fail here rather than in CI: a typecheck error would otherwise surface after
 // the tag is already public.
 console.log("Checking the tree builds…");
